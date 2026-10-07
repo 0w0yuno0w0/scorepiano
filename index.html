@@ -1319,6 +1319,8 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
       if(best&&!(boxR(J,W,H,best.x-s*.98,y,s*.14,s*.14)>.5&&boxR(J,W,H,best.x+s*.98,y,s*.14,s*.14)>.5)){const hr=hrun(best.x,y),vr=vrun(best.x,y);if(hr>=s*.95&&hr<=s*2.6&&vr>=s*.8)return {x:best.x,f:best.f,k:'q',sc:hr};}
       for(const dx of [-.12,0,.12]){const xx=x+dx*s,ob=boxR(J,W,H,xx,y,s*.62,s*.45);if(ob>.3&&ob<.78&&!(boxR(J,W,H,xx-s*.98,y,s*.14,s*.14)>.5&&boxR(J,W,H,xx+s*.98,y,s*.14,s*.14)>.5)&&boxR(J,W,H,xx,y,s*.16,s*.09)<.22&&boxR(J,W,H,xx-s*.5,y,s*.09,s*.14)>.4&&boxR(J,W,H,xx+s*.5,y,s*.09,s*.14)>.4&&boxR(J,W,H,xx,y-s*.42,s*.16,s*.06)>.3&&boxR(J,W,H,xx,y+s*.42,s*.16,s*.06)>.3)return {x:xx,f:.71,k:'h',sc:s*.9};}
       return null;};
+    const ledgerOK=(x,p)=>{if(p<10&&p>-2)return true;const ly=p>=10?L[0]-s:L[4]+s,tk=st.th+2,thin=(xx,y)=>boxR(I,W,H,xx,y-tk,s*.1,.5)<.5||boxR(I,W,H,xx,y+tk,s*.1,.5)<.5;
+      for(let d=-3;d<=3;d++){const yy=ly+d;if(boxR(I,W,H,x,yy,s*.75,.5)>.8&&(thin(x-s*.8,yy)||thin(x+s*.8,yy)))return true;}return false;};
     const stems=[];
     for(const v of vlines){if(clefIds.has(lab[Math.round((v.y1+v.y2)/2)*W+Math.round(v.x)]))continue;
       const tA=Math.abs(v.y1-L[0])<s*.35,bA=Math.abs(v.y2-L[4])<s*.35,cross=(v.y2>=L[4]+s*4.5&&v.y1>L[0]-s*1.2&&v.y1<L[0]+s*.35)||(v.y1<=L[0]-s*4.5&&v.y2>L[4]-s*.35&&v.y2<L[4]+s*1.2),isBar=(tA&&bA)||cross;
@@ -1328,13 +1330,16 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
         for(let p=pLo;p<=pHi;p++){const y=L[4]-p*s/2;if(stOf(y)!==si)continue;r[p]=headAt(xh,y);}
         if(o.dbgX&&v.x>o.dbgX[0]&&v.x<o.dbgX[1]&&si===o.dbgX[2])(o.dbgOut=o.dbgOut||[]).push([Math.round(v.x),side,Object.entries(r).map(([p,h])=>p+':'+(h?h.k+h.f.toFixed(2):'-')).join(' ')]);
         for(let p=pLo;p<=pHi;p++){const h=r[p];if(!h)continue;const a=r[p-1],c=r[p+1];if((a&&(a.sc>h.sc||(a.sc===h.sc&&a.f>h.f)))||(c&&(c.sc>h.sc||(c.sc===h.sc&&c.f>=h.f))))continue;
-          if(p>=10||p<=-2){const ly=p>=10?L[0]-s:L[4]+s,tk=st.th+2,thin=(x,y)=>boxR(I,W,H,x,y-tk,s*.1,.5)<.5||boxR(I,W,H,x,y+tk,s*.1,.5)<.5;let ok=false;for(let d=-3;d<=3&&!ok;d++){const yy=ly+d;ok=boxR(I,W,H,h.x,yy,s*.75,.5)>.8&&(thin(h.x-s*.8,yy)||thin(h.x+s*.8,yy));}if(!ok)continue;}
+          if(!ledgerOK(h.x,p))continue;
           {const yy=Math.round(L[4]-p*s/2),hx=h.k==='h'?h.x-side*s*.45:h.x,xa=Math.round(Math.min(hx,v.x)),xb=Math.round(Math.max(hx,v.x));let gap=0;for(let x=xa;x<=xb;x++){if(!nb[yy*W+x]&&!nb[(yy-1)*W+x]&&!nb[(yy+1)*W+x])gap++;}if(gap>1)continue;}
           found.push({...h,y:L[4]-p*s/2,p});}}
       if(isBar&&!found.length){st.bars.push(v.x);continue;}
       if(!found.length)continue;
       if(found.length>1){found.sort((a,c)=>a.y-c.y);const cl=[[found[0]]];for(let q=1;q<found.length;q++){if(found[q].y-found[q-1].y>s*1.6)cl.push([]);cl[cl.length-1].push(found[q]);}
-        if(cl.length>1&&cl.some(c=>c.some(h=>h.k==='q'))){const keep=cl.filter(c=>c.some(h=>h.k==='q')).flat();found.length=0;found.push(...keep);}}
+        if(cl.length>1){const beamAt=y=>{let mx=0;for(let dy=-Math.round(s*.4);dy<=s*.4;dy++)for(const sd of [-1,1]){const x=Math.round(v.x+sd*s*.7),yy=Math.round(y+dy);if(yy<0||yy>=H||!nb[yy*W+x])continue;let a=x,c=x;while(a>0&&nb[yy*W+a-1])a--;while(c<W-1&&nb[yy*W+c+1])c++;mx=Math.max(mx,c-a+1);}return mx>=s*1.6;};
+          const tB=beamAt(v.y1+s*.25),bB=beamAt(v.y2-s*.25);let kp=cl;
+          if(tB&&!bB)kp=cl.filter(c=>Math.min(...c.map(h=>h.y))>v.y1+s*1.2);else if(bB&&!tB)kp=cl.filter(c=>Math.max(...c.map(h=>h.y))<v.y2-s*1.2);if(!kp.length)kp=cl;
+          if(kp.some(c=>c.some(h=>h.k==='q')))kp=kp.filter(c=>c.some(h=>h.k==='q'));found.length=0;found.push(...kp.flat());}}
       {const mid0=found.reduce((a,h)=>a+h.y,0)/found.length,up0=mid0>(v.y1+v.y2)/2,ext=up0?Math.min(...found.map(h=>h.y))-v.y1:v.y2-Math.max(...found.map(h=>h.y));if(ext<s*2)continue;}
       const mid=found.reduce((a,h)=>a+h.y,0)/found.length,up=mid>(v.y1+v.y2)/2,end=up?v.y1:v.y2,dir=up?1:-1,len=Math.max(0,(v.y2-v.y1)-(Math.max(...found.map(h=>h.y))-Math.min(...found.map(h=>h.y)))-s*1.3);
       let nbm=0;for(const sd of [-1,1]){const cs=[];for(const off of [.5,.85]){const x=Math.round(v.x+sd*off*s);let n=0,run=0,first=-1;const lim=Math.min(s*2.3,len);for(let k=-Math.round(s*.25);k<=lim;k++){const y=Math.round(end+dir*k);if(nb[y*W+x]){if(!run&&first<0)first=k;run++;}else{if(run>=s*.26&&run<=s*1.4)n++;run=0;}}if(run>=s*.26&&run<=s*1.4)n++;if(first>s*1.25)n=0;if(n)cs.push(n);}if(cs.length)nbm=Math.max(nbm,Math.min(...cs));}
@@ -1352,12 +1357,12 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
     for(const g of wm){g.w=g.x1-g.x0+1;g.h=g.y1-g.y0+1;g.cx=(g.x0+g.x1)/2;g.cy=(g.y0+g.y1)/2;g.fill=g.n/(g.w*g.h);}
     if(o.debug)st.dbgW=wm.map(g=>[g.x0,(g.y0-L[0])/s,g.w/s,g.h/s,g.fill,g.parts.length].map(v=>+(+v).toFixed(2)));
     for(const c of wm){if(c.w<s*1.2||c.w>s*2.3||c.h<s*.7||c.h>s*5.2||c.fill<.25||c.fill>.8)continue;
-      if(c.h<=s*1.35){if(boxR(J,W,H,c.cx,c.cy,s*.16,s*.1)<.25){const p=Math.round((L[4]-c.cy)/(s/2));stems.push({x:c.cx,heads:[{x:c.cx,y:L[4]-p*s/2,p,k:'w'}]});c.parts.forEach(q=>q.used=true);}continue;}
+      if(c.h<=s*1.35){const p0=Math.round((L[4]-c.cy)/(s/2));if(!ledgerOK(c.cx,p0))continue;if(boxR(J,W,H,c.cx,c.cy,s*.16,s*.1)<.25){const p=p0;stems.push({x:c.cx,heads:[{x:c.cx,y:L[4]-p*s/2,p,k:'w'}]});c.parts.forEach(q=>q.used=true);}continue;}
       const hs=[],pLo=Math.ceil((L[4]-c.y1)/(s/2)),pHi=Math.floor((L[4]-c.y0)/(s/2));
       const side=(x,y)=>boxR(J,W,H,x,y,s*.1,s*.14)>.4;
       for(let p=pLo;p<=pHi;p++){const y=L[4]-p*s/2;if(boxR(((p%2)+2)%2===0?J:I,W,H,c.cx,y,s*.18,s*.08)<.2&&(side(c.cx-s*.5,y)||side(c.cx-s*.68,y))&&(side(c.cx+s*.5,y)||side(c.cx+s*.68,y)))hs.push(p);}
       const hv=p=>boxR(((p%2)+2)%2===0?J:I,W,H,c.cx,L[4]-p*s/2,s*.3,s*.15),pk=[];for(let i=0;i<hs.length;){let j=i;while(j+1<hs.length&&hs[j+1]===hs[j]+1)j++;let bp=hs[i];for(let q=i;q<=j;q++)if(hv(hs[q])<hv(bp))bp=hs[q];pk.push(bp);i=j+1;}
-      if(pk.length>=2){stems.push({x:c.cx,heads:pk.map(p=>({x:c.cx,y:L[4]-p*s/2,p,k:'w'}))});c.parts.forEach(q=>q.used=true);}}
+      if(pk.length>=2&&pk.every(p=>p<10&&p>-2||ledgerOK(c.cx,p))){stems.push({x:c.cx,heads:pk.map(p=>({x:c.cx,y:L[4]-p*s/2,p,k:'w'}))});c.parts.forEach(q=>q.used=true);}}
     // 7) 付点・臨時記号
     const allHeads=stems.flatMap(sm=>sm.heads);
     // 7a) 前打音（小さい符頭＋符幹1本）とトリル記号「tr」
@@ -1373,17 +1378,26 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
       for(const c of above){const g=gs[gs.length-1];if(g&&c.x0-g.x1<s*.45&&c.y0<g.y1&&c.y1>g.y0){g.cs.push(c);g.x1=Math.max(g.x1,c.x1);g.y0=Math.min(g.y0,c.y0);g.y1=Math.max(g.y1,c.y1);}else gs.push({cs:[c],x0:c.x0,x1:c.x1,y0:c.y0,y1:c.y1});}
       for(const g of gs){const w=g.x1-g.x0,h=g.y1-g.y0;if(g.cs.length!==2||w<s*1||w>s*2.8||h<s*1||h>s*2.2)continue;const [l,r]=g.cs;
         if(l.y0<r.y0-s*.15&&l.w<s*1.05&&r.h<l.h&&r.y1>l.y1-s*.35){st.orns.push({x:(g.x0+g.x1)/2-s*.2,o:'tr'});g.cs.forEach(c=>c.used=true);}}}
+    st.tups=[];if(o.debug)st.dbgT=free.filter(c=>!c.used&&c.h>=s*.6&&c.h<=s*1.6&&c.w>=s*.3&&c.w<=s*1.2&&(c.y1<L[0]+s*.3||c.y0>L[4]-s*.3)).map(c=>[c.x0,+((c.y0-L[0])/s).toFixed(1),+(c.w/s).toFixed(2),+(c.h/s).toFixed(2),+c.fill.toFixed(2)]);
+    {const ends=stems.filter(sm=>sm.v).map(sm=>sm.v);
+      for(const c of free){if(c.used||c.x0<hdrEnd+s||c.h<s*.7||c.h>s*1.5||c.w<s*.4||c.w>s*1.1||c.fill<.2||c.fill>.7)continue;
+        if(!(c.y1<L[0]+s*.3||c.y0>L[4]-s*.3))continue;
+        if(!ends.some(v=>Math.abs(v.x-c.cx)<s*3&&(Math.abs(v.y1-c.cy)<s*2.5||Math.abs(v.y2-c.cy)<s*2.5)))continue;
+        if(allHeads.some(h=>Math.abs(h.x-c.cx)<s*.9&&Math.abs(h.y-c.cy)<s*1.3))continue;
+        const wl=c.w,hl=c.h,lc=boxR(J,W,H,c.x0+wl*.15,c.cy,Math.max(1,wl*.12),Math.max(1,hl*.1)),tl=boxR(J,W,H,c.x0+wl*.25,c.y0+hl*.12,Math.max(1,wl*.15),Math.max(1,hl*.1)),bl=boxR(J,W,H,c.x0+wl*.25,c.y1-hl*.12,Math.max(1,wl*.15),Math.max(1,hl*.1)),rt=boxR(J,W,H,c.x1-wl*.18,c.y0+hl*.3,Math.max(1,wl*.12),Math.max(1,hl*.12)),rb=boxR(J,W,H,c.x1-wl*.18,c.y1-hl*.3,Math.max(1,wl*.12),Math.max(1,hl*.12));
+        if(lc>.6)continue;if(!ends.some(v=>Math.abs(v.x-c.cx)<s*3&&(Math.abs(v.y1-c.cy)<s*2||Math.abs(v.y2-c.cy)<s*2)))continue;
+        st.tups.push({x:c.cx,y:c.cy});c.used=true;}}
     const isDot=c=>c.w>=s*.22&&c.w<=s*.7&&c.h>=s*.22&&c.h<=s*.7&&c.fill>.5;
     for(const h of allHeads){
       const onLine=((h.p%2)+2)%2===0;h.dots=Math.min(2,free.filter(c=>isDot(c)&&c.x0>h.x+s*.75&&c.x0<h.x+s*2.6&&c.cy>h.y-s*(onLine?.85:.4)&&c.cy<h.y+s*(onLine?.1:.4)).length);
-      const ac=free.filter(c=>!c.used&&c.x1<h.x-s*.4&&c.x1>h.x-s*3&&c.h>s*1.5&&c.h<s*3.6&&c.w>s*.4&&c.w<s*1.35&&c.y0<h.y&&c.y1>h.y).sort((a,c)=>c.x1-a.x1)[0];
-      if(ac){const rt=boxR(J,W,H,ac.x1-ac.w*.2,ac.y0+ac.h*.22,ac.w*.18,ac.h*.18);h.acc=rt<.18&&ac.y1-h.y<s*.9?-1:ac.w>=s*.78?1:0;ac.used=true;}
+      const ac=free.filter(c=>!c.used&&c.x1<h.x-s*.4&&c.x1>h.x-s*3&&c.h>s*1.5&&c.h<s*3.6&&c.w>s*.4&&c.w<s*1.35&&c.y0<h.y&&c.y1>h.y&&strokeXs(c).length>=1).sort((a,c)=>c.x1-a.x1)[0];
+      if(ac){const k=strokeXs(ac).length;h.acc=k>=2?(ac.w>=s*.78?1:0):-1;ac.used=true;}
       h.final=true;}
     // 8) 休符
     const nearHead=c=>allHeads.some(h=>h.x>c.x1&&h.x<c.x1+s*2&&Math.abs(h.y-c.cy)<s*1.6);
     for(const c of free){if(c.used||c.y0<L[0]-s*.7||c.y1>L[4]+s*.7)continue;let d=null;
       if(c.w>=s*.85&&c.w<=s*1.8&&c.h>=s*.3&&c.h<=s*.8&&c.fill>.7){d=Math.abs(c.y0-L[1])<s*.4?'w':Math.abs(c.y1-L[2])<s*.4?'h':null;}
-      else if(nearHead(c))continue;
+      else if(nearHead(c)&&strokeXs(c).length>=1)continue;
       else if(c.h>=s*2.1&&c.h<=s*3.6&&c.w>=s*.55&&c.w<=s*1.6&&c.fill>.2&&c.fill<.65){const tl=boxR(J,W,H,c.x0+s*.3,c.y0+s*.35,s*.25,s*.25),ml=boxR(J,W,H,c.x0+s*.25,c.y0+s*1.35,s*.25,s*.25);d=tl>.55&&ml>.55&&c.w>s*1.0?'16':'q';}
       else if(c.h>=s*1.3&&c.h<s*2.1&&c.w>=s*.55&&c.w<=s*1.4&&c.fill>.2&&c.fill<.65&&boxR(J,W,H,c.x0+s*.3,c.y0+s*.3,s*.25,s*.25)>.5)d='8';
       if(!d)continue;
@@ -1423,6 +1437,7 @@ async function omrPage(no,o){
       else if(c>=0xE4E3&&c<=0xE4E8)st.rests.push({x:g.x+.5*st.s,y:g.y,d:['w','h','q','8','16','32'][c-0xE4E3]});
       else if(c>=0xE240&&c<=0xE245)st.flags.push({x:g.x,y:g.y,n:[1,1,2,2,3,3][c-0xE240]});
       else if(c===0xE1E7)st.dots.push({x:g.x,y:g.y});
+      else if(c>=0xE880&&c<=0xE889)(st.tups=st.tups||[]).push({x:g.x+.3*st.s,y:g.y,n:c-0xE880});
       else if(c>=0xE080&&c<=0xE08B)(st.tsg=st.tsg||[]).push({x:g.x,y:g.y,c});}
   }else rasterOMR(b,W,H,staves,I,stOf,o,marks);
   // 譜表の組（大譜表判定）
@@ -1469,12 +1484,19 @@ async function omrPage(no,o){
       col.ms.push(midi);col.ys.push(it.y);col.ds.push(it);if(it.gr)col.gr=(col.gr||[]).concat(it.gr);if(it.orn)col.orn=it.orn;if(it.art)col.art=[...new Set((col.art||[]).concat(it.art))];if(it.dyn)col.dyn=it.dyn;
     }
     cols.forEach(c=>{if(c.k!=='n')return;const best=c.ds.slice().sort((p,q)=>BASE[p.d]-BASE[q.d])[0];c.d=best.d;c.dots=best.dots;});
+    // 別声部の休符（音符と同じ位置）・音符のある小節の全休符は時間を進めない
+    {const nxs=cols.filter(c=>c.k==='n').map(c=>c.x);for(let i=cols.length-1;i>=0;i--){const c=cols[i];if(c.k==='r'&&c.d!=='w'&&nxs.some(x=>Math.abs(x-c.x)<s*.9))cols.splice(i,1);}
+      let a=0;for(let i=0;i<=cols.length;i++){if(i===cols.length||cols[i].k==='b'){const seg=cols.slice(a,i);if(seg.some(c=>c.k==='n'))for(let j=i-1;j>=a;j--)if(cols[j].k==='r'&&cols[j].d==='w')cols.splice(j,1),i--;a=i+1;}}}
+    // 3連符: 数字「3」に最も近い連続3つ
+    (st.tups||[]).forEach(t=>{if(t.n!=null&&t.n!==3)return;let best=null;
+      for(let a=0;a+2<cols.length;a++){const w=[cols[a],cols[a+1],cols[a+2]];if(w.some(c=>c.k==='b'||c.tup)||w[0].k!=='n'&&w[1].k!=='n')continue;const ds=w.map(c=>c.d);if(ds.some(d=>d!==ds[0])&&!(ds[0]==='q'&&ds[1]==='8')||w.some(c=>c.dots))continue;if(w[2].x-w[0].x>s*7)continue;const mx=(w[0].x+w[2].x)/2,d=Math.abs(mx-t.x);if(d<s*1.1&&Math.abs(w[1].x-t.x)<s*.9&&(!best||d<best.d))best={w,d};}
+      if(best)best.w.forEach(c=>c.tup=3);});
     return {si,cols};
   })}));
   return {systems,W,marks,key:keyF,time:timeF,vec,count:marks.length,cv:o.debug?cv:null,dbg:o.debug?staves:null,dbgOut:o.dbgOut};
 }
 function trimTo(si,T){const arr=S.staves[si];let t=staffEnd(si);
-  while(arr.length&&t>T){const e=arr[arr.length-1],d=evTicks(e),st=t-d;if(st>=T){arr.pop();t=st;continue;}arr.pop();appendEv(si,{...e,id:uid(),tie:false},T-st);break;}}
+  while(arr.length&&t>T){const e=arr[arr.length-1],d=evTicks(e),st=t-d;if(st>=T){arr.pop();t=st;continue;}arr.pop();const ne={...e,id:uid(),tie:false};delete ne.tup;appendEv(si,ne,T-st);break;}}
 function omrInferCap(res){
   const cnt={};const tk=c=>evTicks({d:c.d,dots:c.dots});
   for(const r of res)for(const sy of r.systems)for(const p of sy.parts){let sum=0,ok=true,started=false;
@@ -1502,12 +1524,19 @@ async function runOmr(){
       const T=Math.max(...[0,1].slice(0,nSt).map(staffEnd)),T2=(()=>{const m=measureAt(T);return T>m.start?m.start+m.cap:T;})();
       for(let si=0;si<nSt;si++)padTo(si,T2);
       const m0=measures(T2).length-1;
-      for(const part of sy.parts){const si=Math.min(part.si,nSt-1);let barSeen=false,k=0;
+      for(const part of sy.parts){const si=Math.min(part.si,nSt-1);let barSeen=false,k=0,held=[];
         for(const c of part.cols){
-          if(c.k==='b'){if(!barSeen)continue;k++;const ms=measures(T2+WH*8*k,m0+k+1),tgt=ms[m0+k].start;if(staffEnd(si)<tgt)padTo(si,tgt);else trimTo(si,tgt);continue;}
-          barSeen=true;
-          if(c.k==='r'){if(c.d==='w'){const p=staffEnd(si),m=measureAt(p);appendEv(si,{r:true,n:[]},p===m.start?m.cap:m.start+m.cap-p);}else appendEv(si,{r:true,n:[],d:c.d,dots:c.dots});continue;}
-          const tp={r:false,n:[...new Set(c.ms)].filter(m=>m>=LOWK&&m<=HIGHK).map(m=>({m})),d:c.d,dots:c.dots};if(c.orn)tp.orn=c.orn;if(c.gr&&c.gr.length)tp.gr=[...new Set(c.gr)];if(c.art)tp.art=c.art;if(c.dyn)tp.dyn=c.dyn;appendEv(si,tp);}}
+          if(c.k==='b'){if(!barSeen)continue;k++;const ms=measures(T2+WH*8*k,m0+k+1),tgt=ms[m0+k].start;if(staffEnd(si)<tgt)padTo(si,tgt);else trimTo(si,tgt);held=[];continue;}
+          barSeen=true;const T=staffEnd(si);held=held.filter(h=>h.end>T);
+          if(c.k==='r'){if(c.d==='w'){const m=measureAt(T);appendEv(si,{r:true,n:[]},T===m.start?m.cap:m.start+m.cap-T);held=[];continue;}
+            const dur=evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0});
+            if(held.length){const tp={r:false,n:held.map(h=>h.end>T+dur?{m:h.m,t:1}:{m:h.m}),d:c.d,dots:c.dots};if(c.tup)tp.tup=3;appendEv(si,tp,c.tup?null:dur);}
+            else{const tp={r:true,n:[],d:c.d,dots:c.dots};if(c.tup)tp.tup=3;appendEv(si,tp);}continue;}
+          const dur=evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0}),nm=new Map();
+          held.forEach(h=>nm.set(h.m,h.end>T+dur?{m:h.m,t:1}:{m:h.m}));
+          c.ms.forEach((m,i)=>{if(m<LOWK||m>HIGHK)return;const it=c.ds[i]||c,len=evTicks({d:it.d,dots:it.dots,tup:c.tup?3:0});held=held.filter(h=>h.m!==m);
+            if(len>dur+1){nm.set(m,{m,t:1});held.push({m,end:T+len});}else nm.set(m,{m});});
+          const tp={r:false,n:[...nm.values()],d:c.d,dots:c.dots};if(c.tup)tp.tup=3;if(c.orn)tp.orn=c.orn;if(c.gr&&c.gr.length)tp.gr=[...new Set(c.gr)];if(c.art)tp.art=c.art;if(c.dyn)tp.dyn=c.dyn;appendEv(si,tp);}}
     }
     sel=null;lastGroup=null;syncSettings();changed();$('#stage').scrollTop=0;
     const vec=res.some(r=>r.vec);$('#pStatus').textContent=`認識完了 · ${total}個（${vec?'ベクター記号から高精度認識':'画像解析'}）。青/橙=符頭、緑=休符。`;

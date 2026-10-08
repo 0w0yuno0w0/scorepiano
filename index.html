@@ -84,6 +84,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 #score .cur{stroke:#7a63ff;stroke-width:2;opacity:.85}
 #score .curcap{fill:#7a63ff;opacity:.85}
 #score .mhl{fill:rgba(59,91,219,.07);stroke:rgba(59,91,219,.35);stroke-dasharray:4 3}
+#score .owarn{fill:rgba(255,146,43,.13);stroke:rgba(232,89,12,.45);stroke-width:1}
 #score .lbl{font:9px var(--sans);fill:#8b867c}
 #score .ttl{font:600 24px var(--serif);fill:#2b2823;letter-spacing:.02em}
 #score .cmp{font:12px var(--serif);fill:#5b564d}
@@ -161,7 +162,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
   .app{display:block;height:auto}
   .stage{overflow:visible;padding:0;background:none}
   .paper{box-shadow:none;max-width:none;border-radius:0}
-  #score .cur,#score .curcap,#score .mhl{display:none}
+  #score .cur,#score .curcap,#score .mhl,#score .owarn{display:none}
   #score>div,#score svg{width:100%!important;height:auto!important}
   #score .sel-n path,#score .sel-n rect{fill:#000!important;stroke:#000!important}
 }
@@ -288,6 +289,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
       <div class="grp"><span class="gl">調号</span><select class="select" id="bKey"></select></div>
       <div class="grp"><span class="gl">拍子</span><select class="select" id="bTime"></select></div>
       <div class="grp"><span class="gl">テンポ</span><input class="txt num" id="bBpm" type="number" min="20" max="300" placeholder="♩=" title="この小節からのテンポ"><input class="txt" id="bTempoTxt" placeholder="Allegro など" style="width:110px"></div>
+      <div class="grp"><button class="btn" id="owClear" title="PDF取り込みで拍数が合わなかった小節（オレンジ）の表示を消す">要確認表示を消す</button></div>
       <div class="grp"><button class="btn" id="bFill" title="現在の小節の残りを休符で埋める">残りを休符で埋める</button><button class="btn" id="bAdd" title="全休符の小節を末尾に追加">空小節を追加</button></div>
     </div>
     <div class="pal" data-pal="staff">
@@ -612,6 +614,8 @@ function render(){
     y+=s.h;
   });
   drawTies(ctx,nSt);drawSpanners(ctx,nSt);drawCursor();applySel();
+  if(S.omrWarn&&S.omrWarn.length){const first=R.svg.firstChild;S.omrWarn.forEach(mi=>{const mx=R.mx[mi];if(!mx)return;const s0=mx.staves[0],s1=mx.staves[mx.staves.length-1];
+    const r=svgEl('rect',{x:mx.x+1,y:s0.getYForLine(0)-12,width:mx.w-2,height:s1.getYForLine(4)-s0.getYForLine(0)+24,rx:4,class:'owarn'});R.svg.insertBefore(r,first);});}
 }
 function drawTies(ctx,nSt){
   for(let si=0;si<nSt;si++){const arr=S.staves[si];
@@ -1237,10 +1241,10 @@ async function pdfGlyphs(pg,vp,lib){
   const ol=await pg.getOperatorList(),O=lib.OPS,T=lib.Util.transform,out=[],st=[];
   let g={ctm:[1,0,0,1,0,0],fs:1,cs:0,ws:0,hs:1,lead:0,rise:0},tm=[1,0,0,1,0,0],tlm=[1,0,0,1,0,0];
   const move=(tx,ty)=>{tlm=T(tlm,[1,0,0,1,tx,ty]);tm=tlm.slice();};
-  const show=arr=>{for(const x of arr){
+  const show=arr=>{const str=arr.filter(x=>x&&typeof x==='object').map(x=>x.unicode||'').join('').trim();for(const x of arr){
     if(typeof x==='number'){tm=T(tm,[1,0,0,1,-x/1000*g.fs*g.hs,0]);continue;}if(!x)continue;
     const u=x.unicode||'',cp=u.codePointAt(0);
-    if(cp>=0xE000&&cp<=0xF8FF){const trm=T(g.ctm,T(tm,[g.fs*g.hs,0,0,g.fs,0,g.rise])),pt=lib.Util.applyTransform([trm[4],trm[5]],vp.transform),m2=T(vp.transform,trm);out.push({c:cp,x:pt[0],y:pt[1],sz:Math.hypot(m2[2],m2[3])});}
+    if((cp>=0xE000&&cp<=0xF8FF)||(str==='3'&&u==='3')){const trm=T(g.ctm,T(tm,[g.fs*g.hs,0,0,g.fs,0,g.rise])),pt=lib.Util.applyTransform([trm[4],trm[5]],vp.transform),m2=T(vp.transform,trm);out.push({c:cp,x:pt[0],y:pt[1],sz:Math.hypot(m2[2],m2[3])});}
     tm=T(tm,[1,0,0,1,((x.width||0)/1000*g.fs+g.cs+(x.isSpace?g.ws:0))*g.hs,0]);}};
   for(let i=0;i<ol.fnArray.length;i++){const fn=ol.fnArray[i],a=ol.argsArray[i]||[];
     switch(fn){
@@ -1264,11 +1268,20 @@ async function pdfGlyphs(pg,vp,lib){
     }}
   return out;
 }
-function rasterOMR(b,W,H,staves,I,stOf,o,marks){
-  // 1) 譜線除去
+function removeLines(b,W,H,staves){
   const nb=b.slice();
-  staves.forEach(st=>{const t=Math.max(1,Math.floor(st.th/2)),rows=[...st.lines];for(let k=1;k<=5;k++){rows.push(st.lines[0]-k*st.s,st.lines[4]+k*st.s);}rows.forEach(ly=>{const yc=Math.round(ly);if(yc-t-1<0||yc+t+1>=H)return;
-    for(let x=Math.max(0,st.x0-2);x<=Math.min(W-1,st.x1+2);x++){if(!b[(yc-t-1)*W+x]&&!b[(yc+t+1)*W+x])for(let y=yc-t;y<=yc+t;y++)nb[y*W+x]=0;}});});
+  staves.forEach(st=>{const t=Math.max(1,Math.floor(st.th/2)),s=st.s,x0=Math.max(0,st.x0-2),x1=Math.min(W-1,st.x1+2);
+    st.lines.forEach(ly=>{const yc=Math.round(ly);if(yc-t-1<0||yc+t+1>=H)return;for(let x=x0;x<=x1;x++){if(!b[(yc-t-1)*W+x]&&!b[(yc+t+1)*W+x])for(let y=yc-t;y<=yc+t;y++)nb[y*W+x]=0;}});
+    // 加線: 予想位置の近くで、両端が細い短い横線を探して消す（符頭の画素は残る）
+    const thinAt=(x,y)=>{let a=y,c=y;while(a>0&&b[(a-1)*W+x]&&y-a<=t+2)a--;while(c<H-1&&b[(c+1)*W+x]&&c-y<=t+2)c++;return c-a+1<=st.th+2;};
+    for(let k=1;k<=6;k++)for(const exp of [st.lines[0]-k*s,st.lines[4]+k*s]){const yA=Math.round(exp-s*.35),yB=Math.round(exp+s*.35);
+      for(let y=Math.max(t+1,yA);y<=Math.min(H-t-2,yB);y++){let x=x0;while(x<=x1){if(!b[y*W+x]){x++;continue;}let e=x;while(e<x1&&b[y*W+e+1])e++;const L=e-x+1;
+        if(L>=s*1.1&&L<=s*3.6&&thinAt(x+2,y)&&thinAt(e-2,y)){for(let q=x;q<=e;q++){if(!b[(y-t-1)*W+q]&&!b[(y+t+1)*W+q])for(let yy=y-t;yy<=y+t;yy++)nb[yy*W+q]=0;}}x=e+1;}}}});
+  return nb;
+}
+function rasterOMR(b,W,H,staves,I,stOf,o,marks){
+  // 1) 譜線・加線の除去
+  const nb=removeLines(b,W,H,staves);
   const J=integ(nb,W,H);
   const hrun=(x,y)=>{x=Math.round(x);y=Math.round(y);if(!nb[y*W+x])return 0;let a=x,c=x;while(a>0&&nb[y*W+a-1])a--;while(c<W-1&&nb[y*W+c+1])c++;return c-a+1;};
   const vrun=(x,y)=>{x=Math.round(x);y=Math.round(y);if(!nb[y*W+x])return 0;let a=y,c=y;while(a>0&&nb[(a-1)*W+x])a--;while(c<H-1&&nb[(c+1)*W+x])c++;return c-a+1;};
@@ -1328,7 +1341,6 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
       const found=[];
       for(const side of [-1,1]){const xh=v.x+side*s*.62,pLo=Math.ceil((L[4]-(v.y2+s*.5))/(s/2)),pHi=Math.floor((L[4]-(v.y1-s*.5))/(s/2)),r={};
         for(let p=pLo;p<=pHi;p++){const y=L[4]-p*s/2;if(stOf(y)!==si)continue;r[p]=headAt(xh,y);}
-        if(o.dbgX&&v.x>o.dbgX[0]&&v.x<o.dbgX[1]&&si===o.dbgX[2])(o.dbgOut=o.dbgOut||[]).push([Math.round(v.x),side,Object.entries(r).map(([p,h])=>p+':'+(h?h.k+h.f.toFixed(2):'-')).join(' ')]);
         for(let p=pLo;p<=pHi;p++){const h=r[p];if(!h)continue;const a=r[p-1],c=r[p+1];if((a&&(a.sc>h.sc||(a.sc===h.sc&&a.f>h.f)))||(c&&(c.sc>h.sc||(c.sc===h.sc&&c.f>=h.f))))continue;
           if(!ledgerOK(h.x,p))continue;
           {const yy=Math.round(L[4]-p*s/2),hx=h.k==='h'?h.x-side*s*.45:h.x,xa=Math.round(Math.min(hx,v.x)),xb=Math.round(Math.max(hx,v.x));let gap=0;for(let x=xa;x<=xb;x++){if(!nb[yy*W+x]&&!nb[(yy-1)*W+x]&&!nb[(yy+1)*W+x])gap++;}if(gap>1)continue;}
@@ -1342,9 +1354,9 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
           if(kp.some(c=>c.some(h=>h.k==='q')))kp=kp.filter(c=>c.some(h=>h.k==='q'));found.length=0;found.push(...kp.flat());}}
       {const mid0=found.reduce((a,h)=>a+h.y,0)/found.length,up0=mid0>(v.y1+v.y2)/2,ext=up0?Math.min(...found.map(h=>h.y))-v.y1:v.y2-Math.max(...found.map(h=>h.y));if(ext<s*2)continue;}
       const mid=found.reduce((a,h)=>a+h.y,0)/found.length,up=mid>(v.y1+v.y2)/2,end=up?v.y1:v.y2,dir=up?1:-1,len=Math.max(0,(v.y2-v.y1)-(Math.max(...found.map(h=>h.y))-Math.min(...found.map(h=>h.y)))-s*1.3);
-      let nbm=0;for(const sd of [-1,1]){const cs=[];for(const off of [.5,.85]){const x=Math.round(v.x+sd*off*s);let n=0,run=0,first=-1;const lim=Math.min(s*2.3,len);for(let k=-Math.round(s*.25);k<=lim;k++){const y=Math.round(end+dir*k);if(nb[y*W+x]){if(!run&&first<0)first=k;run++;}else{if(run>=s*.26&&run<=s*1.4)n++;run=0;}}if(run>=s*.26&&run<=s*1.4)n++;if(first>s*1.25)n=0;if(n)cs.push(n);}if(cs.length)nbm=Math.max(nbm,Math.min(...cs));}
+      let nbm=0;for(const sd of [-1,1]){const cs=[];for(const off of [.5,.85]){const x=Math.round(v.x+sd*off*s);let n=0,run=0,first=null;const lim=Math.min(s*2.3,len);for(let k=-Math.round(s*.25);k<=lim;k++){const y=Math.round(end+dir*k);if(nb[y*W+x]){if(first===null)first=k;run++;}else{if(run>=s*.26&&run<=s*1.4)n++;run=0;}}if(run>=s*.26&&run<=s*1.4)n++;if(first===null||first>s*1.25)n=0;if(n)cs.push(n);}if(cs.length)nbm=Math.max(nbm,Math.min(...cs));}
       nbm=Math.min(3,nbm);
-      found.forEach(h=>{h.k=h.k==='h'?'h':['q','8','16','32'][nbm];});stems.push({x:v.x,heads:found,v});
+      found.forEach(h=>{h.k=h.k==='h'?'h':['q','8','16','32'][nbm];h.sid=Math.round(v.x)*10000+Math.round(v.y1);});stems.push({x:v.x,heads:found,v});
     }
     // 小節線の重複除去
     st.bars.sort((a,c)=>a-c);st.bars=st.bars.filter((x,i,a)=>x>st.x0+s*1.5&&(i===0||x-a[i-1]>s*1.2));
@@ -1390,9 +1402,17 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
     const isDot=c=>c.w>=s*.22&&c.w<=s*.7&&c.h>=s*.22&&c.h<=s*.7&&c.fill>.5;
     for(const h of allHeads){
       const onLine=((h.p%2)+2)%2===0;h.dots=Math.min(2,free.filter(c=>isDot(c)&&c.x0>h.x+s*.75&&c.x0<h.x+s*2.6&&c.cy>h.y-s*(onLine?.85:.4)&&c.cy<h.y+s*(onLine?.1:.4)).length);
-      const ac=free.filter(c=>!c.used&&c.x1<h.x-s*.4&&c.x1>h.x-s*3&&c.h>s*1.5&&c.h<s*3.6&&c.w>s*.4&&c.w<s*1.35&&c.y0<h.y&&c.y1>h.y&&strokeXs(c).length>=1).sort((a,c)=>c.x1-a.x1)[0];
-      if(ac){const k=strokeXs(ac).length;h.acc=k>=2?(ac.w>=s*.78?1:0):-1;ac.used=true;}
+
       h.final=true;}
+    // 7b) 臨時記号: 記号の中心の高さにある符頭へ付ける（♭は下のふくらみ）
+    const accType=c=>{const xs=strokeXs(c);if(!xs.length)return null;if(xs.length===1)return -1;
+      const ext=x=>{let t=-1,b2=-1;for(let y=c.y0;y<=c.y1;y++)if(lab[y*W+x]===c.id||lab[y*W+x+1]===c.id){if(t<0)t=y;b2=y;}return [t,b2];};
+      const [t1,b1]=ext(xs[0]),[t2,b2]=ext(xs[xs.length-1]),hh=c.h;
+      if(t2-t1>hh*.18&&b2-b1>hh*.18)return 0;return 1;};
+    for(const c of free){if(c.used||c.h<=s*1.5||c.h>=s*3.6||c.w<=s*.4||c.w>=s*1.35)continue;const a=accType(c);if(a===null)continue;
+      const cy=a===-1?c.y1-s*.5:(c.y0+c.y1)/2;let best=null,bd=1e9;
+      for(const h of allHeads){if(h.x<c.x1+s*.3||h.x>c.x1+s*3||h.acc!=null)continue;const dy=Math.abs(h.y-cy);if(dy>s*.7)continue;const d=dy*3+(h.x-c.x1);if(d<bd){bd=d;best=h;}}
+      if(best){best.acc=a;c.used=true;}}
     // 8) 休符
     const nearHead=c=>allHeads.some(h=>h.x>c.x1&&h.x<c.x1+s*2&&Math.abs(h.y-c.cy)<s*1.6);
     for(const c of free){if(c.used||c.y0<L[0]-s*.7||c.y1>L[4]+s*.7)continue;let d=null;
@@ -1403,8 +1423,65 @@ function rasterOMR(b,W,H,staves,I,stOf,o,marks){
       if(!d)continue;
       const rd=free.filter(x=>isDot(x)&&x.x0>c.x1&&x.x0<c.x1+s*1.4&&x.cy<c.cy+s&&x.cy>c.y0).length;
       st.rests.push({x:c.cx,y:c.cy,d,dots:Math.min(1,rd),final:true});}
-    st.heads=allHeads.filter(h=>h.x>hdrEnd);
+    st.heads=allHeads.filter(h=>h.x>hdrEnd);markTies(nb,W,H,st,st.heads);
   });
+}
+function vecStems(b,W,H,staves,flags){
+  // 符頭は記号情報、符幹・連桁は五線を消した画像から求める
+  const nb=removeLines(b,W,H,staves);
+  staves.forEach(st=>{assignStems(nb,W,H,st,st.heads,flags,true);markTies(nb,W,H,st,st.heads);});
+}
+function assignStems(nb,W,H,st,headsAll,flags,vec){
+  {const s=st.s,L=st.lines,yA=Math.max(0,Math.round(L[0]-s*5.5)),yB=Math.min(H-1,Math.round(L[4]+s*5.5)),segs=[];let act=[];
+    // 細い縦線だけを残したマスク（符頭・連桁は横に太いので除外される）
+    const x0=Math.max(0,st.x0-2),x1=Math.min(W-1,st.x1+2),tw=Math.max(2,s*.42),thin=new Uint8Array(W*(yB-yA+1));
+    for(let y=yA;y<=yB;y++){let x=x0;while(x<=x1){if(!nb[y*W+x]){x++;continue;}let e=x;while(e<x1&&nb[y*W+e+1])e++;if(e-x+1<=tw)for(let q=x;q<=e;q++)thin[(y-yA)*W+q]=1;x=e+1;}}
+    for(let x=x0;x<=x1;x++){const nx=[];let y=yA;
+      while(y<=yB){if(thin[(y-yA)*W+x]){let y2=y;while(y2<yB){let j=1;while(j<=4&&y2+j<=yB&&!thin[(y2+j-yA)*W+x])j++;if(j>4||y2+j>yB)break;y2+=j;}if(y2-y+1>=s*1.3){const r=[y,y2];let g=act.find(g=>r[0]<g.y2&&r[1]>g.y1);if(g){g.xe=x;g.y1=Math.min(g.y1,r[0]);g.y2=Math.max(g.y2,r[1]);}else{g={xs:x,xe:x,y1:r[0],y2:r[1]};segs.push(g);}if(!nx.includes(g))nx.push(g);}y=y2+1;}else y++;}act=nx;}
+    const vl=segs.filter(g=>g.xe-g.xs+1<=s*.45).map(g=>({x:(g.xs+g.xe)/2,y1:g.y1,y2:g.y2})),heads=headsAll.filter(h=>h.k!=='w'),xOK=(h,v)=>Math.abs(Math.abs(h.x-v.x)-s*.55)<s*.38;
+    const recs=[];
+    for(const v of vl){
+      let att=heads.filter(h=>xOK(h,v)&&(Math.abs(h.y-v.y2)<s*.9||Math.abs(h.y-v.y1)<s*.9||(h.y>v.y1&&h.y<v.y2)));if(!att.length)continue;
+      const up=att.reduce((a,h)=>a+(Math.abs(h.y-v.y2)<Math.abs(h.y-v.y1)?1:-1),0)>=0;
+      {const xs=[Math.round(v.x-1),Math.round(v.x),Math.round(v.x+1)],dk=y=>y>=0&&y<H&&xs.some(x=>nb[y*W+x]);let y=up?Math.round(v.y2):Math.round(v.y1),gap=0;const st2=up?1:-1;
+        while(gap<=3&&Math.abs(y-(up?v.y2:v.y1))<s*9){y+=st2;if(dk(y))gap=0;else gap++;}
+        const lo=up?v.y1:y-s*.6,hi=up?y+s*.6:v.y2;att=heads.filter(h=>xOK(h,v)&&h.y>=lo&&h.y<=hi);if(!att.length)continue;}
+      const dir=up?1:-1;let end=up?v.y1:v.y2;
+      {const x=Math.round(v.x);let y=end,g=0,last=end;while(g<=1&&Math.abs(y-end)<s*3){y-=dir;if(y>=0&&y<H&&(nb[y*W+x]||nb[y*W+x-1]||nb[y*W+x+1])){g=0;last=y;}else g++;}end=last;}
+      const top=Math.min(...att.map(h=>h.y)),bot=Math.max(...att.map(h=>h.y)),len=up?top-end:end-bot;if(len<s*1.6)continue;
+      if(heads.some(h=>xOK(h,v)&&!att.includes(h)&&Math.abs(h.y-end)<s*1.1))continue;
+      const R={v,up,dir,end,att};recs.push(R);
+      // 符頭の正しい側（上向きは右、下向きは左）に符幹があるほど良い
+      att.forEach(h=>{const side=up?(v.x>h.x?0:s*.25):(v.x<h.x?0:s*.25),c=Math.abs(Math.abs(h.x-v.x)-s*.55)+side;if(!h._bc||c<h._bc){h._bc=c;h._br=R;}});}
+    for(const R of recs){const {v,up,dir,end}=R,att=R.att.filter(h=>h._br===R);if(!att.length)continue;
+      const top=Math.min(...att.map(h=>h.y)),bot=Math.max(...att.map(h=>h.y)),len=up?top-end:end-bot;let n=0;
+      const fl=(flags||[]).filter(f=>f.x>v.x-s*.4&&f.x<v.x+s*1.2&&Math.abs(f.y-end)<s*1.6);
+      if(fl.length)n=Math.max(...fl.map(f=>f.n));
+      else for(const sd of [-1,1]){const cs=[];for(const off of [.3,.6]){const x=Math.round(v.x+sd*off*s);if(x<0||x>=W)continue;let c=0,run=0,first=null;const lim=Math.min(s*2.6,len-s*.75);
+          for(let k=-Math.round(s*.25);k<=lim;k++){const y=Math.round(end+dir*k);if(y<0||y>=H)break;if(nb[y*W+x]){if(first===null)first=k;run++;}else{if(run>=s*(vec?.3:.2)&&run<=s*1.4)c++;run=0;}}if(run>=s*(vec?.3:.2)&&run<=s*1.4)c++;if(first===null||first>s*(vec?.6:1.05))c=0;if(c)cs.push(c);}
+        if(cs.length)n=Math.max(n,Math.min(...cs));}
+      n=Math.min(3,n);const sid=Math.round(v.x)*10000+Math.round(v.y1);att.forEach(h=>{h.sid=sid;if(h.k==='q'&&(!h.vd||h.vd==='q'))h.vd=['q','8','16','32'][n];});}
+    heads.forEach(h=>{delete h._bc;delete h._br;});
+    // 2音間トレモロ: 2分音符どうしの間に太い斜線が2本以上 → 各音は半分の長さ
+    {const hh=headsAll.filter(h=>h.k==='h').sort((p,q)=>p.x-q.x),cols=[];hh.forEach(h=>{const c=cols[cols.length-1];if(c&&h.x-c.x<s*.8)c.hs.push(h);else cols.push({x:h.x,hs:[h]});});
+      for(let i=0;i+1<cols.length;i++){const A=cols[i],B=cols[i+1];if(B.x-A.x>s*8||B.x-A.x<s*2)continue;if(headsAll.some(h=>h.x>A.x+s*.8&&h.x<B.x-s*.8))continue;
+        const ys=A.hs.concat(B.hs).map(h=>h.y),y0=Math.round(Math.min(...ys)-s*3.5),y1=Math.round(Math.max(...ys)+s*3.5);let best=99;
+        for(const f of [.4,.5,.6]){const mx=Math.round(A.x+(B.x-A.x)*f);let n=0,run=0;for(let y=Math.max(0,y0);y<=Math.min(H-1,y1)+1;y++){if(y<H&&nb[y*W+mx])run++;else{if(run>=s*.3&&run<=s*1.1)n++;run=0;}}best=Math.min(best,n);}
+        if(best>=2){A.hs.concat(B.hs).forEach(h=>h.vd='q');i++;}}}
+    // 符幹が見つからない黒符頭は、近くの音符の長さを使う
+    if(vec)headsAll.forEach(h=>{if(h.k!=='q'||h.vd)return;const fl=(flags||[]).filter(f=>f.x>h.x-s*.9&&f.x<h.x+s*1.6&&Math.abs(f.y-h.y)<s*4.5);if(fl.length){h.vd=['q','8','16','32'][Math.min(3,Math.max(...fl.map(f=>f.n)))];return;}let b0=null,bd=1e9;st.heads.forEach(g=>{if(!g.vd||g.k!=='q')return;const d=Math.abs(g.x-h.x);if(d<s*2.4&&Math.abs(g.y-h.y)<s*4&&d<bd){bd=d;b0=g;}});if(b0)h.vd=b0.vd;});
+    return recs;
+  }
+}
+function markTies(nb,W,H,st,heads){
+  // 同じ高さの隣り合う符頭の間に、細い弧（タイ）があるか
+  const s=st.s,run=(x,y)=>{x=Math.round(x);y=Math.round(y);if(y<0||y>=H||!nb[y*W+x])return 0;let a=y,c=y;while(a>0&&nb[(a-1)*W+x])a--;while(c<H-1&&nb[(c+1)*W+x])c++;return c-a+1;};
+  const hs=heads.filter(h=>!h.grace).sort((a,c)=>a.x-c.x);
+  for(const h of hs){const nx=hs.find(g=>g.x>h.x+s*1.2&&Math.abs(g.y-h.y)<s*.25);if(!nx||nx.x-h.x>s*16)continue;
+    if(hs.some(g=>g!==nx&&g.x>h.x+s*.8&&g.x<nx.x-s*.8&&Math.abs(g.y-h.y)<s*.25))continue;
+    for(const sd of [-1,1]){const offs=[];for(const f of [.2,.5,.8]){const x=h.x+s*.6+(nx.x-h.x-s*1.2)*f;let off=null;
+        for(let k=Math.round(s*.25);k<=s*1.7;k++){const y=h.y+sd*k,r=run(x,y);if(r){if(r<=s*.38)off=k;break;}}offs.push(off);}
+      if(offs.every(v=>v!=null)&&offs[1]>=Math.max(offs[0],offs[2])-1&&offs[1]>=s*.45){h.tie=true;break;}}}
 }
 function clefBaseDi(c){return c==='bass'?18:c==='alto'?24:c==='tenor'?22:c==='treble8'?23:30;}
 async function omrPage(no,o){
@@ -1425,20 +1502,28 @@ async function omrPage(no,o){
     const hs=gl.filter(g=>g.c>=0xE0A0&&g.c<=0xE0A9&&g.sz).map(g=>g.sz).sort((a,c)=>a-c),medSz=hs.length?hs[hs.length>>1]:0;
     const ORN={0xE566:'tr',0xE567:'turn',0xE56C:'mordent_inverted',0xE56D:'mordent'},ARTG={0xE4A0:'acc',0xE4A1:'acc',0xE4A2:'stacc',0xE4A3:'stacc',0xE4A4:'ten',0xE4A5:'ten',0xE4A6:'stiss',0xE4A7:'stiss',0xE4AC:'marc',0xE4AD:'marc',0xE4C0:'ferm',0xE4C1:'ferm'},DYNC={0xE520:'p',0xE521:'m',0xE522:'f',0xE523:'r',0xE524:'s',0xE525:'z'};
     staves.forEach(st=>{st.graces=[];st.orns=[];st.arts=[];st.dyns=[];});
-    for(const g of gl){const si=stOf(g.y);if(si<0)continue;const st=staves[si],c=g.c;
+    const ledgerAt=(x,ly,s)=>{for(let d=-3;d<=3;d++)if(boxR(I,W,H,x,ly+d,s*.7,.5)>.85)return true;return false;};
+    const headStaff=(g,si)=>{const st=staves[si],x=g.x+.59*st.s;let o=-1;
+      if(g.y>st.lines[4]+st.s*.9&&staves[si+1]&&g.y<staves[si+1].lines[0])o=si+1;else if(g.y<st.lines[0]-st.s*.9&&staves[si-1]&&g.y>staves[si-1].lines[4])o=si-1;if(o<0)return si;
+      const so=staves[o],mine=g.y>st.lines[4]?ledgerAt(x,st.lines[4]+st.s,st.s):ledgerAt(x,st.lines[0]-st.s,st.s),other=o>si?(g.y>so.lines[0]-so.s*.9?false:ledgerAt(x,so.lines[0]-so.s,so.s)):(g.y<so.lines[4]+so.s*.9?false:ledgerAt(x,so.lines[4]+so.s,so.s));
+      return (!mine&&other)?o:si;};
+    for(const g of gl){let si=stOf(g.y);if(si<0)continue;if(g.c>=0xE0A0&&g.c<=0xE0A9)si=headStaff(g,si);const st=staves[si],c=g.c;
       if(c>=0xE0A0&&c<=0xE0A9&&medSz&&g.sz&&g.sz<medSz*.8)st.graces.push({x:g.x+.4*st.s,y:g.y});
       else if(c>=0xE560&&c<=0xE563)st.graces.push({x:g.x+.4*st.s,y:g.y});
       else if(ORN[c])st.orns.push({x:g.x+.5*st.s,o:ORN[c]});
       else if(ARTG[c])st.arts.push({x:g.x+.4*st.s,a:ARTG[c]});
       else if(DYNC[c])st.dyns.push({x:g.x,ch:DYNC[c],w:st.s});
       else if(c>=0xE0A0&&c<=0xE0A9)st.heads.push({x:g.x+.59*st.s,y:g.y,k:c===0xE0A0||c===0xE0A2?'w':c===0xE0A3?'h':'q'});
-      else if(c===0xE050||c===0xE052||c===0xE053||c===0xE062||c===0xE05C){if(!st.clef||g.x<st.clef.x)st.clef={x:g.x,t:c===0xE062?'bass':c===0xE05C?(Math.abs(g.y-st.lines[1])<st.s*.6?'tenor':'alto'):c===0xE052?'treble8':'treble'};}
+      else if(c===0xE050||c===0xE052||c===0xE053||c===0xE062||c===0xE05C||c===0xE07A||c===0xE07C){const t=(c===0xE062||c===0xE07C)?'bass':c===0xE05C?(Math.abs(g.y-st.lines[1])<st.s*.6?'tenor':'alto'):c===0xE052?'treble8':'treble';
+        if(g.x<st.x0+st.s*3){if(!st.clef||g.x<st.clef.x)st.clef={x:g.x,t};}else(st.clefCh=st.clefCh||[]).push({x:g.x,t});}
       else if(c>=0xE260&&c<=0xE264)st.acc.push({x:g.x,y:g.y,a:{0xE260:-1,0xE261:0,0xE262:1,0xE263:2,0xE264:-2}[c]});
       else if(c>=0xE4E3&&c<=0xE4E8)st.rests.push({x:g.x+.5*st.s,y:g.y,d:['w','h','q','8','16','32'][c-0xE4E3]});
       else if(c>=0xE240&&c<=0xE245)st.flags.push({x:g.x,y:g.y,n:[1,1,2,2,3,3][c-0xE240]});
       else if(c===0xE1E7)st.dots.push({x:g.x,y:g.y});
       else if(c>=0xE880&&c<=0xE889)(st.tups=st.tups||[]).push({x:g.x+.3*st.s,y:g.y,n:c-0xE880});
+      else if(c===0x33){if(g.y>st.lines[0]-st.s*4.5&&g.y<st.lines[4]+st.s*5)(st.tups=st.tups||[]).push({x:g.x+.25*st.s,y:g.y,n:3});}
       else if(c>=0xE080&&c<=0xE08B)(st.tsg=st.tsg||[]).push({x:g.x,y:g.y,c});}
+    vecStems(b,W,H,staves,gl.filter(g=>g.c>=0xE240&&g.c<=0xE24F).map(g=>({x:g.x,y:g.y,n:[1,1,2,2,3,3,4,4,5,5][g.c-0xE240]||1})));
   }else rasterOMR(b,W,H,staves,I,stOf,o,marks);
   // 譜表の組（大譜表判定）
   const sys=[];
@@ -1450,19 +1535,21 @@ async function omrPage(no,o){
   const systems=sys.map(ids=>({parts:ids.map((sti,pi)=>{
     const st=staves[sti],s=st.s,clef=st.clef?.t||(ids.length===2?(pi===0?'treble':'bass'):(o.clefSingle||'treble')),si=ids.length===2?pi:(clef==='bass'&&nStavesFor(o)>1?1:0),base=clefBaseDi(clef);
     let key=st.keyR!=null?st.keyR:o.key;if(st.keyR!=null&&keyF==null)keyF=st.keyR;
-    if(vec){const firstX=Math.min(...st.heads.map(h=>h.x),...st.rests.map(r=>r.x),...(st.tsg||[]).map(t=>t.x),st.x1);const ks=st.acc.filter(a=>a.x<firstX-s*.6&&(!st.clef||a.x>st.clef.x+s));
+    if(vec){const firstX=Math.min(...st.heads.map(h=>h.x),...st.rests.map(r=>r.x),...(st.tsg||[]).map(t=>t.x),st.x1);const ks=[];{const cand=st.acc.filter(a=>a.x<firstX-s*.6&&(!st.clef||a.x>st.clef.x+s)).sort((p,q)=>p.x-q.x);let last=st.clef?st.clef.x+s*2.6:st.x0+s*3;for(const a of cand){if(a.x-last>s*1.8||(ks.length&&a.a!==ks[0].a))break;ks.push(a);last=a.x+s;}}
       if(ks.length){key=ks[0].a>0?Math.min(7,ks.length):-Math.min(7,ks.length);}else key=0;st.acc=st.acc.filter(a=>!ks.includes(a));if(keyF==null)keyF=key;
       if(st.tsg&&!timeF){const mid=st.lines[2],up=st.tsg.filter(t=>t.y<mid).sort((a,c)=>a.x-c.x),dn=st.tsg.filter(t=>t.y>=mid).sort((a,c)=>a.x-c.x);
         if(st.tsg.some(t=>t.c===0xE08A))timeF='C';else if(st.tsg.some(t=>t.c===0xE08B))timeF='C|';else if(up.length&&dn.length)timeF=up.map(t=>t.c-0xE080).join('')+'/'+dn.map(t=>t.c-0xE080).join('');}
       if(!st.bars.length)for(let x=Math.round(st.x0+s*2);x<st.x1;x++){if(boxR(I,W,H,x+.5,(st.lines[0]+st.lines[4])/2,.5,s*2)<.95)continue;if(st.heads.some(h=>Math.abs(h.x-x)<s*1.4))continue;const l=st.bars[st.bars.length-1];if(l!=null&&x-l<s*.8)continue;st.bars.push(x);}}
     const items=[];
     st.heads.forEach(h=>{let d=h.k,dots=0;const step=Math.round((st.lines[4]-h.y)/(s/2));const cc=(st.clefCh||[]).filter(c=>c.x<h.x).pop();h.di=(cc?clefBaseDi(cc.t):base)+step;h.y=st.lines[4]-step*s/2;
-      if(!h.final&&(d==='q'||(!vec&&d==='h'))){const sm=stemInfo(b,W,H,h.x,h.y,s,s*.59);
+      if(h.vd)d=h.vd;
+      else if(vec){}
+      else if(!h.final&&(d==='q'||d==='h')){const sm=stemInfo(b,W,H,h.x,h.y,s,s*.59);
         if(!vec&&d==='h'){d=sm?'h':'w';}
         else if(d==='q'){let n=0;const fl=st.flags.filter(f=>f.x>h.x-s*.9&&f.x<h.x+s*1.6&&Math.abs(f.y-h.y)<s*4.5);if(fl.length)n=Math.max(...fl.map(f=>f.n));else if(sm)n=beamCount(b,W,H,sm,s);d=['q','8','16','32'][n];}}
       const dd=h.final?(h.dots||0):vec?st.dots.filter(t=>t.x>h.x+s*.5&&t.x<h.x+s*2.4&&Math.abs(t.y-h.y)<s*.75).length:(boxR(I,W,H,h.x+s*1.25,h.y-(step%2===0?s*.5:0),s*.14,s*.14)>.7&&boxR(I,W,H,h.x+s*1.25,h.y-(step%2===0?s*.5:0),s*.45,s*.45)<.35?1:0);
       dots=Math.min(2,dd);const ac=h.final?(h.acc!=null?{a:h.acc}:null):st.acc.filter(a=>a.x<h.x-s*.4&&a.x>h.x-s*3.6&&Math.abs(a.y-h.y)<s*.6).sort((a,c)=>c.x-a.x)[0];
-      items.push({x:h.x,k:'n',di:h.di,d,dots,acc:ac?ac.a:null,y:h.y});marks.push({x:h.x,y:h.y,r:s*.75,c:vec?'#1c7ed6':'#e8590c'});});
+      items.push({x:h.x,k:'n',di:h.di,d,dots,acc:ac?ac.a:null,y:h.y,tie:!!h.tie,sid:h.sid});marks.push({x:h.x,y:h.y,r:s*.75,c:vec?'#1c7ed6':'#e8590c'});});
     {const hI=items.filter(it=>it.k==='n'),near=(x,md,right)=>{let b0=null,bd=1e9;for(const it of hI){const dx=it.x-x;if(right&&dx<=0)continue;const d=Math.abs(dx);if(d<bd&&d<md){bd=d;b0=it;}}return b0;};
       (st.graces||[]).forEach(g=>{const it=near(g.x,s*3.5,true);if(!it)return;const step=Math.round((st.lines[4]-g.y)/(s/2)),cc=(st.clefCh||[]).filter(c=>c.x<g.x).pop(),di=(cc?clefBaseDi(cc.t):base)+step,Lg=((di%7)+7)%7;(it.gr=it.gr||[]).push((Math.floor(di/7)+1)*12+NAT[Lg]+keyAlts(key)[Lg]);});
       (st.orns||[]).forEach(o=>{const it=near(o.x,s*1.6);if(it)it.orn=o.o;});
@@ -1470,6 +1557,8 @@ async function omrPage(no,o){
       const ds=(st.dyns||[]).sort((a,c)=>a.x-c.x),dg=[];ds.forEach(d=>{const g=dg[dg.length-1];if(g&&d.x-g.x1<s*1.6){g.t+=d.ch;g.x1=d.x;}else dg.push({t:d.ch,x:d.x,x1:d.x});});
       dg.forEach(g=>{if(!DYNV[g.t])return;const it=near(g.x+s*.6,s*2.5);if(it)it.dyn=g.t;});}
     st.rests.forEach(r=>{const dd=r.final?(r.dots||0):st.dots.filter(t=>t.x>r.x&&t.x<r.x+s*2.2).length;items.push({x:r.x,k:'r',d:r.d,dots:Math.min(2,dd)});marks.push({x:r.x,y:st.lines[2],r:s*.6,c:'#2b8a3e'});});
+    {const rs=items.filter(it=>it.k==='r'),drop=new Set(),rt=it=>BASE[it.d]*(it.dots?1.5:1);rs.forEach(a=>rs.forEach(b2=>{if(a!==b2&&!drop.has(b2)&&Math.abs(a.x-b2.x)<s*.9&&(rt(a)>rt(b2)||(rt(a)===rt(b2)&&a.x>b2.x)))drop.add(a);}));
+      for(let i=items.length-1;i>=0;i--)if(drop.has(items[i]))items.splice(i,1);}
     st.bars.forEach(x=>items.push({x,k:'b'}));
     items.sort((a,c)=>a.x-c.x);
     // 和音の列にまとめ、小節内臨時記号を適用
@@ -1480,8 +1569,11 @@ async function omrPage(no,o){
       const L=((it.di%7)+7)%7,oct=Math.floor(it.di/7);let a=it.acc;if(a!=null)mem[it.di]=a;else a=mem[it.di]??ka[L];
       const midi=(oct+1)*12+NAT[L]+a;
       let col=cols[cols.length-1];
-      if(!(col&&col.k==='n'&&(it.x-col.x<s*.55||(it.x-col.x<s*1.4&&col.ys.some(y=>Math.abs(y-it.y)<s*.6)))))cols.push(col={k:'n',x:it.x,ms:[],ys:[],ds:[]});
-      col.ms.push(midi);col.ys.push(it.y);col.ds.push(it);if(it.gr)col.gr=(col.gr||[]).concat(it.gr);if(it.orn)col.orn=it.orn;if(it.art)col.art=[...new Set((col.art||[]).concat(it.art))];if(it.dyn)col.dyn=it.dyn;
+      if(it.sid!=null){const sc=cols.slice(-3).find(c=>c.k==='n'&&c.sids&&c.sids.includes(it.sid));if(sc)col=sc;}
+      const diffStem=it.sid!=null&&col&&col.sids&&col.sids.length&&!col.sids.includes(it.sid);
+      if(!(col&&col.k==='n'&&((it.sid!=null&&col.sids&&col.sids.includes(it.sid))||it.x-col.x<s*(diffStem?.3:.55)||(!diffStem&&it.x-col.x<s*1.4&&col.ys.some(y=>Math.abs(y-it.y)<s*.6)))))cols.push(col={k:'n',x:it.x,ms:[],ys:[],ds:[],sids:[]});
+      if(it.sid!=null&&!col.sids.includes(it.sid))col.sids.push(it.sid);
+      col.ms.push(midi);col.ys.push(it.y);col.ds.push(it);if(it.gr)col.gr=(col.gr||[]).concat(it.gr);if(it.orn)col.orn=it.orn;if(it.art)col.art=[...new Set((col.art||[]).concat(it.art))];if(it.dyn)col.dyn=it.dyn;if(it.tie)(col.ties=col.ties||[]).push(midi);
     }
     cols.forEach(c=>{if(c.k!=='n')return;const best=c.ds.slice().sort((p,q)=>BASE[p.d]-BASE[q.d])[0];c.d=best.d;c.dots=best.dots;});
     // 別声部の休符（音符と同じ位置）・音符のある小節の全休符は時間を進めない
@@ -1491,9 +1583,9 @@ async function omrPage(no,o){
     (st.tups||[]).forEach(t=>{if(t.n!=null&&t.n!==3)return;let best=null;
       for(let a=0;a+2<cols.length;a++){const w=[cols[a],cols[a+1],cols[a+2]];if(w.some(c=>c.k==='b'||c.tup)||w[0].k!=='n'&&w[1].k!=='n')continue;const ds=w.map(c=>c.d);if(ds.some(d=>d!==ds[0])&&!(ds[0]==='q'&&ds[1]==='8')||w.some(c=>c.dots))continue;if(w[2].x-w[0].x>s*7)continue;const mx=(w[0].x+w[2].x)/2,d=Math.abs(mx-t.x);if(d<s*1.1&&Math.abs(w[1].x-t.x)<s*.9&&(!best||d<best.d))best={w,d};}
       if(best)best.w.forEach(c=>c.tup=3);});
-    return {si,cols};
+    return {si,cols,s};
   })}));
-  return {systems,W,marks,key:keyF,time:timeF,vec,count:marks.length,cv:o.debug?cv:null,dbg:o.debug?staves:null,dbgOut:o.dbgOut};
+  return {systems,W,marks,key:keyF,time:timeF,vec,count:marks.length,cv:o.debug?cv:null,dbg:o.debug?staves:null,dbgOut:o.dbgOut,gl:o.debug?gl:null};
 }
 function trimTo(si,T){const arr=S.staves[si];let t=staffEnd(si);
   while(arr.length&&t>T){const e=arr[arr.length-1],d=evTicks(e),st=t-d;if(st>=T){arr.pop();t=st;continue;}arr.pop();const ne={...e,id:uid(),tie:false};delete ne.tup;appendEv(si,ne,T-st);break;}}
@@ -1519,15 +1611,22 @@ async function runOmr(){
       if(tm&&TIMES.includes(tm)){const p=parseTime(tm);S.time=p.time;S.timeSym=p.sym;}
       else{const cap=omrInferCap(res);if(cap){S.time=cap;S.timeSym='';}}}
     if(res.some(r=>r.systems.some(s=>s.parts.length===2||s.parts.some(p=>p.si===1))))S.layout='grand';
+    const warn=new Set(replace?[]:(S.omrWarn||[]));
     const nSt=nStaves();
     for(const r of res)for(const sy of r.systems){
       const T=Math.max(...[0,1].slice(0,nSt).map(staffEnd)),T2=(()=>{const m=measureAt(T);return T>m.start?m.start+m.cap:T;})();
       for(let si=0;si<nSt;si++)padTo(si,T2);
       const m0=measures(T2).length-1;
-      for(const part of sy.parts){const si=Math.min(part.si,nSt-1);let barSeen=false,k=0,held=[];
+      for(const part of sy.parts){// 小節が長すぎるときは、数字が省略された3連符を推定（3つ並んだ同じ音価の音を3連符に）
+        {const cap=measureAt(T2).cap,cd=c=>evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0});let seg=[];
+          const fix=()=>{let tot=seg.reduce((a,c)=>a+cd(c),0),ex=tot-cap;if(ex<=0)return;
+            for(let i=0;i+2<seg.length&&ex>0;i++){const w=seg.slice(i,i+3);if(w.some(c=>c.k!=='n'||c.tup||c.dots||c.d!==w[0].d)||!['16','32'].includes(w[0].d)||(part.s&&w[2].x-w[0].x>part.s*6))continue;const u=BASE[w[0].d];if(u>ex)continue;w.forEach(c=>c.tup=3);ex-=u;i+=2;}};
+          for(const c of part.cols){if(c.k==='b'){fix();seg=[];}else if(c.k==='n'||c.k==='r')seg.push(c);}fix();}
+        const si=Math.min(part.si,nSt-1);let barSeen=false,k=0,held=[],since=0;
         for(const c of part.cols){
-          if(c.k==='b'){if(!barSeen)continue;k++;const ms=measures(T2+WH*8*k,m0+k+1),tgt=ms[m0+k].start;if(staffEnd(si)<tgt)padTo(si,tgt);else trimTo(si,tgt);held=[];continue;}
-          barSeen=true;const T=staffEnd(si);held=held.filter(h=>h.end>T);
+          if(c.k==='b'){if(!barSeen||!since)continue;since=0;k++;const ms=measures(T2+WH*8*k,m0+k+1),tgt=ms[m0+k].start;if(staffEnd(si)!==tgt)warn.add(m0+k-1);if(staffEnd(si)>tgt)trimTo(si,tgt);
+            while(S.staves[si].length&&(staffEnd(si)>tgt||(tgt-staffEnd(si))%60))S.staves[si].pop();padTo(si,tgt);held=[];continue;}
+          barSeen=true;since++;const T=staffEnd(si);held=held.filter(h=>h.end>T);
           if(c.k==='r'){if(c.d==='w'){const m=measureAt(T);appendEv(si,{r:true,n:[]},T===m.start?m.cap:m.start+m.cap-T);held=[];continue;}
             const dur=evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0});
             if(held.length){const tp={r:false,n:held.map(h=>h.end>T+dur?{m:h.m,t:1}:{m:h.m}),d:c.d,dots:c.dots};if(c.tup)tp.tup=3;appendEv(si,tp,c.tup?null:dur);}
@@ -1535,11 +1634,11 @@ async function runOmr(){
           const dur=evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0}),nm=new Map();
           held.forEach(h=>nm.set(h.m,h.end>T+dur?{m:h.m,t:1}:{m:h.m}));
           c.ms.forEach((m,i)=>{if(m<LOWK||m>HIGHK)return;const it=c.ds[i]||c,len=evTicks({d:it.d,dots:it.dots,tup:c.tup?3:0});held=held.filter(h=>h.m!==m);
-            if(len>dur+1){nm.set(m,{m,t:1});held.push({m,end:T+len});}else nm.set(m,{m});});
+            if(len>dur+1){nm.set(m,{m,t:1});held.push({m,end:T+len});}else nm.set(m,(c.ties||[]).includes(m)?{m,t:1}:{m});});
           const tp={r:false,n:[...nm.values()],d:c.d,dots:c.dots};if(c.tup)tp.tup=3;if(c.orn)tp.orn=c.orn;if(c.gr&&c.gr.length)tp.gr=[...new Set(c.gr)];if(c.art)tp.art=c.art;if(c.dyn)tp.dyn=c.dyn;appendEv(si,tp);}}
     }
-    sel=null;lastGroup=null;syncSettings();changed();$('#stage').scrollTop=0;
-    const vec=res.some(r=>r.vec);$('#pStatus').textContent=`認識完了 · ${total}個（${vec?'ベクター記号から高精度認識':'画像解析'}）。青/橙=符頭、緑=休符。`;
+    S.omrWarn=[...warn].sort((a,b)=>a-b);sel=null;lastGroup=null;syncSettings();changed();$('#stage').scrollTop=0;
+    const vec=res.some(r=>r.vec);$('#pStatus').textContent=`認識完了 · ${total}個（${vec?'ベクター記号から高精度認識':'画像解析'}）。青/橙=符頭、緑=休符。`+(S.omrWarn.length?` 拍数が合わない小節 ${S.omrWarn.length}個を譜面上でオレンジ表示しています。`:'');
     toast(`PDF楽譜を取り込みました（${vec?'記号情報':'画像解析'}）`);
   }catch(e){console.error(e);$('#pStatus').textContent='認識失敗: '+e.message;}
   btn.disabled=false;
@@ -1612,6 +1711,7 @@ $('#bKey').onchange=e=>{const v=e.target.value;setMA((a,mi)=>{if(mi===0){if(v!==
 $('#bTime').onchange=e=>{const v=e.target.value;setMA((a,mi)=>{if(mi===0){if(v){const p=parseTime(v);S.time=p.time;S.timeSym=p.sym;}}else if(v){const p=parseTime(v);a.time=p.time;a.tsym=p.sym;}else{a.time=null;a.tsym=null;}});[0,1].forEach(reflow);changed();syncSettings();};
 $('#bBpm').onchange=e=>setMA((a,mi)=>{const v=+e.target.value;if(mi===0&&v){S.tempo=clamp(v,30,220);syncSettings();}else a.bpm=v?clamp(v,20,300):null;});
 $('#bTempoTxt').onchange=e=>setMA(a=>a.ttxt=e.target.value.trim());
+$('#owClear').onclick=()=>{if(!S.omrWarn||!S.omrWarn.length){toast('要確認の小節はありません');return;}S.omrWarn=[];changed();toast('要確認表示を消しました');};
 $('#bFill').onclick=()=>{hist();const T=maxEnd(),m=measureAt(Math.max(0,T-1)),end=T===0?m.cap:(T>m.start?m.start+m.cap:T);for(let si=0;si<nStaves();si++)padTo(si,end);changed({scroll:true});};
 $('#bAdd').onclick=()=>{hist();const T=maxEnd(),m=measureAt(T),end=T>m.start?m.start+m.cap:T;for(let si=0;si<nStaves();si++)padTo(si,end);const m2=measureAt(end);for(let si=0;si<nStaves();si++)padTo(si,end+m2.cap);changed({scroll:true});};
 $('#layout').onchange=e=>{hist();S.layout=e.target.value;if(S.layout==='single'&&S.staves[1].length)toast('下段の内容は保持したまま非表示になります',3000);changed();};

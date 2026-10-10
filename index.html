@@ -86,6 +86,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 #score .mhl{fill:rgba(59,91,219,.07);stroke:rgba(59,91,219,.35);stroke-dasharray:4 3}
 #score .owarn{fill:rgba(255,146,43,.13);stroke:rgba(232,89,12,.45);stroke-width:1}
 #score .lbl{font:9px var(--sans);fill:#8b867c}
+#score .expr{font:italic 12px Georgia,"Hiragino Mincho ProN",serif;fill:#2b2925}#score .chd{font:bold 13px Georgia,serif;fill:#2b2925}
 #score .ttl{font:600 24px var(--serif);fill:#2b2823;letter-spacing:.02em}
 #score .cmp{font:12px var(--serif);fill:#5b564d}
 .err{padding:40px;text-align:center;color:#6b6457;font-size:14px}
@@ -189,6 +190,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
         <div class="menu-list" role="menu">
           <label for="fMidi">MIDIファイルを読み込む<small>.mid</small></label>
           <label for="fPdf">PDF楽譜を読み込む<small>OMR</small></label>
+          <label for="fXml">MusicXMLを読み込む<small>.musicxml/.mxl</small></label>
           <label for="fJson">譜面ファイルを開く<small>.json</small></label>
           <hr>
           <button id="mSave">譜面を保存<small>Ctrl+S</small></button>
@@ -201,6 +203,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
       <input type="file" id="fMidi" accept="audio/midi,audio/x-midi,.mid,.midi" hidden>
       <input type="file" id="fPdf" accept="application/pdf,.pdf" hidden>
       <input type="file" id="fJson" accept="application/json,.json" hidden>
+      <input type="file" id="fXml" accept=".musicxml,.xml,.mxl,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml" hidden>
     </div>
   </header>
 
@@ -219,6 +222,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
         <button class="btn sym" id="dot1" aria-pressed="false" title="付点">♩.</button>
         <button class="btn sym" id="dot2" aria-pressed="false" title="複付点">♩..</button>
         <button class="btn sym" id="tup" aria-pressed="false" title="3連符">³</button>
+        <button class="btn" id="voice2" aria-pressed="false" title="第2声部（符幹下向き）に入力：同じ段に2つの旋律を重ねて書けます">声部2</button>
       </div>
       <div class="grp">
         <button class="btn sym" id="rest" title="休符を入力 / 選択を休符に (` キー)">𝄽<span style="font-size:11px">休符</span></button>
@@ -256,6 +260,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
         <button class="btn sym" data-orn="mordent_inverted" title="プラルトリラー"><svg width="22" height="12" viewBox="0 0 22 12"><path d="M1 8l4-5 4 6 4-6 4 6 4-5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
         <button class="btn sym" data-orn="turn" title="ターン"><svg width="22" height="12" viewBox="0 0 22 12"><path d="M3 8c-3-4 3-8 6-3s5 6 8 2-2-7-4-3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button>
         <button class="btn" id="graceBtn" aria-pressed="false" title="前打音: ONにして鍵盤を押すと、選択中（なければ直前）の音符に前打音を付けます">前打音</button>
+        <button class="btn sym" id="trem" title="トレモロ（押すたびに斜線1→2→3本→なし）"><svg width="16" height="20" viewBox="0 0 16 20"><path d="M2 7l12-4M2 12l12-4M2 17l12-4" stroke="currentColor" stroke-width="2.2"/></svg></button>
         <button class="btn sym" id="arp" title="アルペジオ"><svg width="10" height="22" viewBox="0 0 10 22"><path d="M5 1c4 2-4 3 0 5s-4 3 0 5-4 3 0 5-4 3 0 5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
       </div>
       <div class="grp"><span class="gl">範囲</span>
@@ -295,6 +300,8 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
     <div class="pal" data-pal="staff">
       <div class="grp"><span class="gl">譜表</span><select class="select" id="layout"><option value="grand">大譜表（ピアノ）</option><option value="single">1段譜表</option></select></div>
       <div class="grp"><span class="gl">上段</span><select class="select" id="clef0"></select><span class="gl" id="clef1L">下段</span><select class="select" id="clef1"></select></div>
+      <div class="grp"><span class="gl">音色</span><select class="select" id="sound" title="録音ピアノ: Salamander Grand Piano（Alexander Holm, CC BY 3.0）をネットから読み込みます"><option value="sample">録音グランドピアノ</option><option value="synth">合成ピアノ（軽量・オフライン）</option></select><span class="chip" id="sndState">未読込</span></div>
+      <div class="grp"><span class="gl">途中で音部記号</span><select class="select" id="clefCh" title="選択した音符の位置から音部記号を変更"></select></div>
       <div class="grp"><span class="gl">調号</span><select class="select" id="key"></select></div>
       <div class="grp"><span class="gl">拍子</span><select class="select" id="time"></select></div>
       <div class="grp"><span class="gl">作曲者</span><input class="txt" id="composer" placeholder="作曲者・編曲者"></div>
@@ -380,6 +387,7 @@ function spell(m,k,sp){
   const ka=keyAlts(k),cs=spellCands(m);let c=null;
   if(sp!=null)c=cs.find(x=>x.L===sp);
   if(!c)c=cs.find(x=>Math.abs(x.a)<=1&&x.a===ka[x.L]);
+  if(!c&&S.mode==='minor'&&k>=2){const lt=((7*k+8)%12+12)%12,L=(k*4+4)%7;if(pcOf(m)===lt)c=cs.find(x=>x.L===L&&x.a===ka[L]+1);}
   if(!c){const pc=pcOf(m);
     if(k===0&&pc===10)c=cs.find(x=>x.L===6&&x.a===-1);
     else if(k===0&&pc===3)c=cs.find(x=>x.L===2&&x.a===-1);
@@ -393,15 +401,18 @@ const parseTime=s=>s==='C'?{time:[4,4],sym:'C'}:s==='C|'?{time:[2,2],sym:'C|'}:{
 const CLEFS={treble:'ト音記号',bass:'ヘ音記号',alto:'ハ音記号（アルト）',tenor:'ハ音記号（テノール）'};
 
 /* ================= スコアモデル ================= */
-const Q=480,WH=1920,BASE={w:1920,h:960,q:480,'8':240,'16':120,'32':60},DURS=['w','h','q','8','16','32'];
-const evTicks=e=>{let t=BASE[e.d]||480;if(e.dots===1)t*=1.5;else if(e.dots===2)t*=1.75;if(e.tup)t=t*2/3;return Math.round(t);};
-const DEC=[];DURS.forEach(d=>[2,1,0].forEach(dots=>DEC.push({d,dots,t:evTicks({d,dots})})));DEC.sort((a,b)=>b.t-a.t);
+const Q=480,WH=1920,BASE={w:1920,h:960,q:480,'8':240,'16':120,'32':60,'64':30},DURS=['w','h','q','8','16','32','64'];
+const tupA=e=>(e.tup===true||e.tup===1)?3:e.tup,tupN=e=>e.tn||(tupA(e)===3?2:2**Math.floor(Math.log2(tupA(e))));
+const evTicks=e=>{if(e.tk)return e.tk;let t=BASE[e.d]||480;if(e.dots===1)t*=1.5;else if(e.dots===2)t*=1.75;if(e.tup)t=t*tupN(e)/tupA(e);return Math.round(t);};
+const DEC=[];DURS.forEach(d=>(d==='64'?[0]:[2,1,0]).forEach(dots=>DEC.push({d,dots,t:evTicks({d,dots})})));DEC.sort((a,b)=>b.t-a.t);
 const decompose=t=>{const o=[];for(const x of DEC)while(t>=x.t){o.push({d:x.d,dots:x.dots});t-=x.t;}return o;};
-function newScore(prev){return {v:2,title:'無題の楽譜',composer:'',layout:prev?.layout||'grand',clefs:prev?.clefs?[...prev.clefs]:['treble','bass'],key:prev?.key||0,time:prev?.time?[...prev.time]:[4,4],timeSym:prev?.timeSym||'',tempo:prev?.tempo||100,staves:[[],[]],sp:[],mA:{}};}
+function newScore(prev){return {v:2,title:'無題の楽譜',composer:'',layout:prev?.layout||'grand',clefs:prev?.clefs?[...prev.clefs]:['treble','bass'],key:prev?.key||0,time:prev?.time?[...prev.time]:[4,4],timeSym:prev?.timeSym||'',tempo:prev?.tempo||100,staves:[[],[],[],[]],clefCh:[],sp:[],mA:{}};}
 let S=newScore();
 const nStaves=()=>S.layout==='grand'?2:1;
 const staffEnd=si=>{let t=0;for(const e of S.staves[si])t+=evTicks(e);return t;};
-const maxEnd=()=>Math.max(0,...[0,1].slice(0,nStaves()).map(staffEnd));
+const LISTS=()=>S.layout==='grand'?[0,1,2,3]:[0,2];
+const maxEnd=()=>Math.max(0,...LISTS().map(staffEnd));
+function clefAt(s,t){let c=S.clefs[s]||'treble';for(const x of S.clefCh||[])if(x.s===s&&x.t<=t)c=x.c;return c;}
 function measures(upto,minCount=1){
   const ms=[];let t=0,key=S.key,time=S.time,sym=S.timeSym,bpm=S.tempo;
   for(let i=0;i<20000;i++){
@@ -409,7 +420,7 @@ function measures(upto,minCount=1){
     const a=S.mA[i];let kc=false,tc=false,prevKey=key;
     if(a&&i>0){if(a.key!=null&&a.key!==key){key=a.key;kc=true;}if(a.time){time=a.time;sym=a.tsym||'';tc=true;}}
     if(a&&a.bpm)bpm=a.bpm;
-    const cap=Math.round(time[0]*WH/time[1]);
+    const cap=a&&a.len?a.len:Math.round(time[0]*WH/time[1]);
     ms.push({i,start:t,cap,key,prevKey,time,sym,kc,tc,bpm});t+=cap;
   }
   return ms;
@@ -419,13 +430,14 @@ function appendEv(si,tpl,ticks){
   const arr=S.staves[si];if(!tpl.id)tpl.id=uid();if(!tpl.n)tpl.n=[];
   let pos=staffEnd(si);
   if(ticks==null)ticks=evTicks(tpl);
+  if(tpl.tk){arr.push(tpl);return [tpl];}
   if(tpl.tup){const m=measureAt(pos),rem=m.start+m.cap-pos;if(evTicks(tpl)>rem)padTo(si,m.start+m.cap);arr.push(tpl);return [tpl];}
   const isNote=!tpl.r,finalTie=!!tpl.tie,out=[];let first=true,left=ticks;
-  while(left>=60){
+  while(left>=30){
     const m=measureAt(pos),rem=m.start+m.cap-pos,chunk=Math.min(left,rem),parts=decompose(chunk);
     if(!parts.length)break;
     for(const p of parts){
-      const e=first?tpl:{id:uid(),r:tpl.r,n:tpl.r?[]:tpl.n.map(x=>({...x}))};first=false;
+      const e=first?tpl:{id:uid(),r:tpl.r,n:tpl.r?[]:tpl.n.map(x=>({...x}))};if(tpl.hid)e.hid=1;first=false;
       e.d=p.d;e.dots=p.dots;e.tie=isNote;arr.push(e);out.push(e);pos+=evTicks(e);
     }
     left-=chunk;
@@ -433,9 +445,9 @@ function appendEv(si,tpl,ticks){
   if(out.length)out[out.length-1].tie=isNote&&finalTie;
   return out;
 }
-function padTo(si,T){const e=staffEnd(si);if(T>e)appendEv(si,{r:true,n:[]},T-e);}
+function padTo(si,T){const e=staffEnd(si);if(T>e)appendEv(si,si>=2?{r:true,n:[],hid:1}:{r:true,n:[]},T-e);}
 function reflow(si){const old=S.staves[si];S.staves[si]=[];for(const e of old)appendEv(si,e,evTicks(e));}
-function findEv(id){for(let si=0;si<2;si++){const idx=S.staves[si].findIndex(e=>e.id===id);if(idx>=0)return {si,idx,e:S.staves[si][idx]};}return null;}
+function findEv(id){for(let si=0;si<S.staves.length;si++){const idx=S.staves[si].findIndex(e=>e.id===id);if(idx>=0)return {si,idx,e:S.staves[si][idx]};}return null;}
 function tickOf(si,idx){let t=0;for(let i=0;i<idx;i++)t+=evTicks(S.staves[si][i]);return t;}
 
 /* ================= 状態 / 履歴 ================= */
@@ -458,16 +470,12 @@ const DYNG={p:'dynamicPiano',m:'dynamicMezzo',f:'dynamicForte',s:'dynamicSforzan
 const GAP=120;
 const tsSpec=m=>m.sym||m.time.join('/');
 function gather(nSt){
-  const end=maxEnd(),ms=measures(end);
-  const by=ms.map(()=>Array.from({length:nSt},()=>[]));
-  for(let si=0;si<nSt;si++){
-    const os=new Map();
-    for(const sp of S.sp){if(sp.s!==si||(sp.t!=='8va'&&sp.t!=='8vb'))continue;
-      let a=S.staves[si].findIndex(e=>e.id===sp.a),b=S.staves[si].findIndex(e=>e.id===sp.b);if(a<0||b<0)continue;if(a>b)[a,b]=[b,a];
-      for(let i=a;i<=b;i++)os.set(i,sp.t==='8va'?1:-1);}
-    let t=0,j=0;
-    S.staves[si].forEach((e,idx)=>{while(j<ms.length-1&&t>=ms[j].start+ms[j].cap)j++;by[j][si].push({e,idx,t,si,os:os.get(idx)||0});t+=evTicks(e);});
-  }
+  const end=maxEnd(),ms=measures(end),L=LISTS().filter(li=>li%2<nSt);
+  const by=ms.map(()=>[[],[],[],[]]),pos=new Map();
+  for(const li of L){let t=0;for(const e of S.staves[li]){pos.set(e.id,{li,t});t+=evTicks(e);}}
+  const oct=[];for(const sp of S.sp){if(sp.t!=='8va'&&sp.t!=='8vb')continue;const A=pos.get(sp.a),B=pos.get(sp.b);if(!A||!B)continue;oct.push({s:A.li%2,a:Math.min(A.t,B.t),b:Math.max(A.t,B.t),v:sp.t==='8va'?1:-1});}
+  for(const li of L){let t=0,j=0;const oc=oct.filter(o=>o.s===li%2);
+    S.staves[li].forEach((e,idx)=>{while(j<ms.length-1&&t>=ms[j].start+ms[j].cap)j++;const o=oc.find(o=>t>=o.a&&t<=o.b);by[j][li].push({e,idx,t,si:li,os:o?o.v:0});t+=evTicks(e);});}
   return {ms,by,end};
 }
 function annot(txt,kind){
@@ -478,65 +486,92 @@ function annot(txt,kind){
   else{a.setFont('Georgia, Hiragino Mincho ProN, serif',12,'normal','italic');a.setVerticalJustification(VJ.TOP);}
   return a;
 }
+const REST2={treble:['d/5','g/4'],bass:['f/3','b/2'],alto:['e/4','a/3'],tenor:['c/4','f/3']};
 function buildMeasure(m,lists,nSt){
-  const voices=[],beams=[],tuplets=[],items=[],tickX=[];const capVF=m.cap*128/15;
+  const voices=[],vst=[],beams=[],tuplets=[],items=[],tickX=[],ka=keyAlts(m.key);
   for(let si=0;si<nSt;si++){
-    const clef=S.clefs[si]||'treble',list=lists[si],notes=[],tx=[],ka=keyAlts(m.key),accSt={};let used=0;
-    if(!list.length){const r=new VF.StaveNote({keys:[REST_KEY[clef]],duration:'wr',clef,align_center:true});r.setIntrinsicTicks(capVF);r.__mr=true;notes.push(r);}
-    else{
-      let tb=[],tt=0,ts=0,tf='8';
-      const flush=()=>{if(!tb.length)return;while(ts<tt-1){const g=new VF.GhostNote({duration:tf});tb.push(g);notes.push(g);const gt=Math.round(BASE[tf]*2/3);ts+=gt;used+=gt;}
-        try{tuplets.push(new VF.Tuplet(tb,{num_notes:3,notes_occupied:2}));}catch(_){}tb=[];};
-      for(const it of list){
-        const e=it.e;let note;
-        if(e.r)note=new VF.StaveNote({keys:[REST_KEY[clef]],duration:e.d+'r',dots:e.dots||0,clef});
-        else{
-          const sp=e.n.map(x=>spell(x.m,m.key,x.sp)).sort((a,b)=>(a.oct*7+a.L)-(b.oct*7+b.L)||a.a-b.a);it.sp=sp;
-          note=new VF.StaveNote({keys:sp.map(s=>LET[s.L].toLowerCase()+'/'+(s.oct-it.os)),duration:e.d,dots:e.dots||0,clef,auto_stem:true});
-          sp.forEach((s,i)=>{const k=s.L+':'+s.oct,cur=(k in accSt)?accSt[k]:ka[s.L];if(s.a!==cur){note.addModifier(new VF.Accidental(ACC[s.a]),i);accSt[k]=s.a;}});
+    const l1=lists[si]||[],l2=lists[si+2]||[],two=l2.some(it=>!it.e.hid),vl=two?[l1,l2]:[l1],accSt={},stx=[];
+    for(const it of vl.flat().filter(it=>!it.e.r).sort((a,b)=>a.t-b.t)){
+      const sp=it.e.n.map(x=>spell(x.m,m.key,x.sp)).sort((a,b)=>(a.oct*7+a.L)-(b.oct*7+b.L)||a.a-b.a);it.sp=sp;it.acc=[];
+      sp.forEach((s,i)=>{const k=s.L+':'+s.oct,cur=(k in accSt)?accSt[k]:ka[s.L];if(s.a!==cur){it.acc.push(i);accSt[k]=s.a;}});}
+    vl.forEach((list,vi)=>{
+      const notes=[],sd=two?(vi===0?1:-1):0,vit=[];let used=0,pc=clefAt(si,m.start);
+      if(!list.length){const r=new VF.StaveNote({keys:[REST_KEY[pc]],duration:'wr',clef:pc,align_center:true});r.setIntrinsicTicks(Math.round(m.cap*128/15));r.__mr=true;r.__t0=m.start;r.__t1=m.start+m.cap;notes.push(r);}
+      else{
+        let tb=[],tt=0,ts=0,G=null,cur=m.start;
+        const ghost=(a,b)=>{const g=new VF.GhostNote({duration:'16'});g.__t0=a;g.__t1=b;notes.push(g);stx.push({t:a,note:g});};
+        const flush=()=>{if(!tb.length)return;try{tuplets.push(new VF.Tuplet(tb,{num_notes:3,notes_occupied:2}));}catch(_){}tb=[];};
+        const flushG=()=>{if(!G)return;try{const tp=new VF.Tuplet(G.ns,{num_notes:G.a,notes_occupied:G.n,bracketed:G.br,ratioed:false});if(!G.hide)tuplets.push(tp);}catch(_){}G=null;};
+        for(const it of list){
+          const e=it.e,cl=clefAt(si,it.t),d=e.d||'q';let note;
+          if(it.t>cur+1){flush();flushG();ghost(cur,it.t);}
+          if(cl!==pc){if(vi===0&&it.t>m.start){const cn=new VF.ClefNote(cl,'small');notes.push(cn);}pc=cl;}
+          if(e.hid)note=new VF.GhostNote({duration:d,dots:e.dots||0});
+          else if(e.r&&e.mr&&list.length===1){note=new VF.StaveNote({keys:[REST_KEY[cl]],duration:'wr',clef:cl,align_center:true});note.setIntrinsicTicks(Math.round(evTicks(e)*128/15));note.__mr=true;}
+          else if(e.r)note=new VF.StaveNote({keys:[two?REST2[cl][vi]:REST_KEY[cl]],duration:d+'r',dots:e.dots||0,clef:cl});
+          else{const sp=it.sp;note=new VF.StaveNote(Object.assign({keys:sp.map(s=>LET[s.L].toLowerCase()+'/'+(s.oct-it.os)),duration:d,dots:e.dots||0,clef:cl},sd?{stem_direction:sd}:{auto_stem:true}));
+            it.acc.forEach(i=>note.addModifier(new VF.Accidental(ACC[sp[i].a]),i));
+            if(e.trem)try{note.addModifier(new VF.Tremolo(e.trem),0);}catch(_){}}
+          if(e.dots&&!e.hid&&!note.__mr)VF.Dot.buildAndAttach([note],{all:true});
+          note.setAttribute('id','e'+e.id);note.__t0=it.t;note.__t1=it.t+evTicks(e);cur=Math.max(cur,note.__t1);it.note=note;items.push(it);vit.push(it);stx.push({t:it.t,note});
+          if(e.tup&&e.tg!=null){flush();if(G&&G.id!==e.tg)flushG();if(!G)G={id:e.tg,ns:[],a:tupA(e),n:tupN(e),hide:!!e.th,br:false};G.ns.push(note);if(['w','h','q'].includes(d)||e.r)G.br=true;notes.push(note);}
+          else if(e.tup){flushG();if(!tb.length){tt=2*BASE[d];ts=0;}tb.push(note);notes.push(note);ts+=evTicks(e);if(ts>=tt-1||(ts%(Q/2)<1&&ts>0)){tt=ts;flush();}}
+          else{flush();flushG();notes.push(note);}
         }
-        if(e.dots)VF.Dot.buildAndAttach([note],{all:true});
-        note.setAttribute('id','e'+e.id);it.note=note;items.push(it);tx.push({t:it.t,note});
-        if(e.tup){if(!tb.length){tt=2*BASE[e.d];ts=0;tf=e.d;}tb.push(note);notes.push(note);ts+=evTicks(e);if(ts>=tt-1||(ts%(Q/2)<1&&ts>0)){tt=ts;flush();}}
-        else{flush();notes.push(note);}
-        used+=evTicks(e);
+        flush();flushG();
+        if(cur<m.start+m.cap-1&&vi===0)ghost(cur,m.start+m.cap);
       }
-      flush();
-      if(used<m.cap){let t=m.start+used;for(const p of decompose(m.cap-used)){const g=new VF.GhostNote({duration:p.d,dots:p.dots});notes.push(g);tx.push({t,note:g});t+=evTicks(p);}}
-    }
-    const real=notes.filter(n=>!(n instanceof VF.GhostNote)&&!n.__mr);
-    try{beams.push(...VF.Beam.generateBeams(real,{groups:VF.Beam.getDefaultBeamGroups(m.time.join('/'))}));}catch(_){}
-    for(const it of items){if(it.si!==si)continue;const e=it.e,n=it.note;let up=true;try{up=n.getStemDirection()===1;}catch(_){}
-      (e.art||[]).forEach(a=>{if(!ART[a])return;const ar=new VF.Articulation(ART[a]);ar.setPosition(a==='ferm'||e.r||!up?3:4);n.addModifier(ar,0);});
-      if(e.orn&&!e.r)n.addModifier(new VF.Ornament(e.orn),0);
-      if(e.gr&&e.gr.length&&!e.r){try{const gns=e.gr.map(g=>{const sp=spell(g,m.key),gn=new VF.GraceNote({keys:[LET[sp.L].toLowerCase()+'/'+(sp.oct-it.os)],duration:'8',slash:true,clef:S.clefs[si]||'treble'});if(sp.a!==keyAlts(m.key)[sp.L])gn.addModifier(new VF.Accidental(ACC[sp.a]),0);return gn;});
-        const grp=new VF.GraceNoteGroup(gns,true);if(gns.length>1)grp.beamNotes();n.addModifier(grp,0);}catch(err){console.warn(err);}}
-      if(e.arp&&!e.r&&e.n.length>1)n.addModifier(new VF.Stroke(7),0);
-      for(const k of ['fg','ch','tx','ly'])if(e[k])n.addModifier(annot(e[k],k),0);
-    }
-    const v=new VF.Voice({num_beats:m.time[0],beat_value:m.time[1]}).setMode(VF.Voice.Mode.SOFT);v.addTickables(notes);voices.push(v);tickX.push(tx);
+      // 描画上の間隔を実際の時刻に合わせる（連符の丸め・声部ずれで音符が詰まらないように）
+      {const K=128/15;for(const n of notes){if(n.__t0==null)continue;const a=Math.round((n.__t0-m.start)*K),b=Math.round((n.__t1-m.start)*K);if(b>a)n.ticks=new VF.Fraction(b-a,1);}}
+      // 連桁: 拍ごとにまとめる（見えない休符では切らない・見える休符と4分以上で切る）
+      {const unit=(m.time[1]===8&&m.time[0]%3===0)?720:m.time[1]===16?240:480;let grp=[],gb=null;
+        const fl=()=>{if(grp.length>1){try{beams.push(new VF.Beam(grp,!sd));}catch(_){}}grp=[];};
+        if(vit.some(it=>it.e.bm)){// MusicXML の連桁指定どおり
+          for(const it of vit){const e=it.e,n=it.note;if(e.hid)continue;if(e.r||!e.bm||e.bm==='n'||!['8','16','32','64','128'].includes(n.getDuration())){fl();continue;}
+            if(e.bm==='b')fl();grp.push(n);if(e.bm==='e')fl();}fl();}
+        else for(const n of notes){if(n instanceof VF.ClefNote||n instanceof VF.GhostNote||n.__mr||n.__t0==null)continue;
+          const ok=!n.isRest()&&['8','16','32','64','128'].includes(n.getDuration());if(!ok){fl();gb=null;continue;}
+          const b=Math.floor((n.__t0-m.start+.5)/unit);if(b!==gb){fl();gb=b;}grp.push(n);}fl();}
+      for(const it of vit){const e=it.e,n=it.note;if(e.hid)continue;let up=true;try{up=n.getStemDirection()===1;}catch(_){}
+        (e.art||[]).forEach(a=>{if(!ART[a])return;const ar=new VF.Articulation(ART[a]);ar.setPosition(a==='ferm'||e.r||!up?3:4);n.addModifier(ar,0);});
+        if(e.orn&&!e.r)n.addModifier(new VF.Ornament(e.orn),0);
+        if(e.gr&&e.gr.length&&!e.r){try{const gc=clefAt(si,it.t),gns=e.gr.map(g=>{const sp=spell(g,m.key),gn=new VF.GraceNote({keys:[LET[sp.L].toLowerCase()+'/'+(sp.oct-it.os)],duration:'8',slash:true,clef:gc});if(sp.a!==keyAlts(m.key)[sp.L])gn.addModifier(new VF.Accidental(ACC[sp.a]),0);return gn;});
+          const grp=new VF.GraceNoteGroup(gns,true);if(gns.length>1)grp.beamNotes();n.addModifier(grp,0);}catch(err){console.warn(err);}}
+        if(e.arp&&!e.r&&e.n.length>1)n.addModifier(new VF.Stroke(7),0);
+        for(const k of ['fg','ly'])if(e[k])n.addModifier(annot(e[k],k),0);
+      }
+      const v=new VF.Voice({num_beats:Math.max(1,Math.round(m.cap*128/15)),beat_value:16384,resolution:16384}).setMode(VF.Voice.Mode.SOFT);v.addTickables(notes);voices.push(v);vst.push(si);
+    });
+    tickX.push(stx);
   }
-  let mismatch=false;if(voices.length>1){try{mismatch=!voices[0].getTotalTicks().equals(voices[1].getTotalTicks());}catch(_){mismatch=true;}}
-  return {voices,beams,tuplets,items,tickX,mismatch};
+  return {voices,vst,beams,tuplets,items,tickX,capT:Math.round(m.cap*128/15)};
 }
-function minW(B){
-  try{if(B.mismatch)return Math.max(...B.voices.map(v=>new VF.Formatter().joinVoices([v]).preCalculateMinTotalWidth([v])));
-    const f=new VF.Formatter();B.voices.forEach(v=>f.joinVoices([v]));return f.preCalculateMinTotalWidth(B.voices);}catch(e){return 160;}
-}
+function joinF(B){const f=new VF.Formatter();for(let si=0;si<2;si++){const vs=B.voices.filter((v,k)=>B.vst[k]===si);if(vs.length)f.joinVoices(vs);}return f;}
+// 縦方向の広がり（五線の線番号: 0=第1線, 4=第5線）。符幹・連桁・アーティキュレーションも含めて見積もる
+function extOf(B){const ex=[[4,0],[4,0]];for(const it of B.items){const n=it.note,e=it.e;if(e.hid||!n.keyProps)continue;const s2=it.si%2,ls=n.keyProps.map(k=>k.line);let hi=Math.max(...ls),lo=Math.min(...ls);
+    if(!e.r&&e.d!=='w'){let d=1;try{d=n.getStemDirection();}catch(_){}const L=(n.beam?4.5:3.5)+(['32','64'].includes(e.d)?1:0);if(d===1)hi+=L;else lo-=L;}
+    if(e.art&&e.art.length){hi+=1.2;lo-=1.2;}if(e.orn){hi+=1.8;}if(e.tx||e.ch)hi+=2.2;if(e.tup&&!e.th)hi+=1.5;ex[s2][0]=Math.max(ex[s2][0],hi);ex[s2][1]=Math.min(ex[s2][1],lo);}return ex;}
+function minW(B){try{return joinF(B).preCalculateMinTotalWidth(B.voices);}catch(e){return 160;}}
 function fmtMeasure(B,w){
-  if(!B.mismatch){try{const f=new VF.Formatter();B.voices.forEach(v=>f.joinVoices([v]));f.format(B.voices,w);return;}catch(e){console.warn(e);}}
-  B.voices.forEach(v=>{try{new VF.Formatter().joinVoices([v]).format([v],w);}catch(e){console.warn(e);}});
+  try{const f=joinF(B);f.format(B.voices,w);
+    // 隠れ休符の多い小節などで右側が大きく空くときは、時間の比率に合わせて横に広げる
+    const tc=f.getTickContexts&&f.getTickContexts();if(tc&&tc.list.length>4&&B.capT){const lt=Math.max(...tc.list),lc=tc.map[lt],xr=lc.getX()/w,tr=lt/B.capT;
+      if(xr>0&&xr<tr*.85){const k=Math.min(3,tr*.97/xr);tc.list.forEach(t=>{const c=tc.map[t];c.setX(c.getX()*k);});}}
+    return;}catch(e){console.warn(e);}
+  for(let si=0;si<2;si++){const vs=B.voices.filter((v,k)=>B.vst[k]===si);if(!vs.length)continue;try{new VF.Formatter().joinVoices(vs).format(vs,w);}catch(e){console.warn(e);}}
 }
 const MW=new Map();
+const clefChg=(si,m)=>m.start>0&&clefAt(si,m.start-1)!==clefAt(si,m.start);
 function modsW(m,start){
-  const k=[start,S.clefs.join(),m.key,m.prevKey,m.kc,m.tc,tsSpec(m),m.i===0].join('|');if(MW.has(k))return MW.get(k);
-  const st=new VF.Stave(0,0,500),base=new VF.Stave(0,0,500).getNoteStartX();
-  decorateStave(st,m,start,0);
-  const w=Math.max(0,st.getNoteStartX()-base);MW.set(k,w);return w;
+  const nSt=nStaves(),cs=[0,1].slice(0,nSt).map(si=>clefAt(si,m.start)+(clefChg(si,m)?'*':''));
+  const k=[start,cs.join(),m.key,m.prevKey,m.kc,m.tc,tsSpec(m),m.i===0].join('|');if(MW.has(k))return MW.get(k);
+  let w=0;for(let si=0;si<nSt;si++){const st=new VF.Stave(0,0,500),base=new VF.Stave(0,0,500).getNoteStartX();decorateStave(st,m,start,si);w=Math.max(w,st.getNoteStartX()-base);}
+  MW.set(k,w);return w;
 }
 function decorateStave(st,m,start,si){
-  if(start){st.addClef(S.clefs[si]||'treble');if(m.key)st.addKeySignature(KEYSPEC[m.key]);if(m.i===0||m.tc)st.addTimeSignature(tsSpec(m));}
-  else{if(m.kc)st.addKeySignature(KEYSPEC[m.key],KEYSPEC[m.prevKey]);if(m.tc)st.addTimeSignature(tsSpec(m));}
+  const c=clefAt(si,m.start);
+  if(start){st.addClef(c);if(m.key)st.addKeySignature(KEYSPEC[m.key]);if(m.i===0||m.tc)st.addTimeSignature(tsSpec(m));}
+  else{if(clefChg(si,m))st.addClef(c,'small');else st.clef=c;if(m.kc)st.addKeySignature(KEYSPEC[m.key],KEYSPEC[m.prevKey]);if(m.tc)st.addTimeSignature(tsSpec(m));}
 }
 function drawDyn(ctx,txt,x,y){
   const pt=34,gs=[...txt].map(ch=>DYNG[ch]).filter(Boolean);let ws=gs.map(c=>{try{return new VF.Glyph(c,pt).getMetrics().width;}catch(_){return 10;}});
@@ -549,23 +584,33 @@ function render(){
   const small=Math.min(innerWidth,innerHeight)<520;R.scale=UI.zoom*(small?.72:1);
   const W=Math.max(300,Math.floor(host.clientWidth/R.scale));R.W=W;
   const nSt=nStaves(),G=gather(nSt);R.G=G;
-  const bodies=G.ms.map((m,mi)=>{
-    const ck=JSON.stringify([m.key,m.time,S.clefs,G.by[mi].map(l=>l.map(it=>{const e=it.e;return [e.r,e.n,e.d,e.dots,e.tup,e.art,e.orn,e.arp,e.fg,e.ch,e.tx,e.ly,e.gr,it.os];}))]);
-    let w=R.cache.get(ck);if(w==null){w=minW(buildMeasure(m,G.by[mi],nSt));if(R.cache.size>5000)R.cache.clear();R.cache.set(ck,w);}
-    return Math.max(84,w*1.42+38);
+  const rawW=[],EXT=[],bodies=G.ms.map((m,mi)=>{
+    const ck=JSON.stringify([m.key,m.time,m.cap,[0,1].map(si=>clefAt(si,m.start)),(S.clefCh||[]).filter(x=>x.t>m.start&&x.t<m.start+m.cap),G.by[mi].map(l=>l.map(it=>{const e=it.e;return [e.r,e.hid,e.n,e.d,e.dots,e.tup,e.tn,e.tg,e.trem,e.bm,e.art,e.orn,e.arp,e.fg,e.ch,e.tx,e.ly,e.gr,it.os];}))]);
+    let c=R.cache.get(ck);if(c==null){const B=buildMeasure(m,G.by[mi],nSt);c={w:minW(B),ex:extOf(B)};if(R.cache.size>5000)R.cache.clear();R.cache.set(ck,c);}
+    const w=c.w;rawW[mi]=w;EXT[mi]=c.ex;return Math.max(84,w*1.42+38);
   });
   const left=nSt>1?34:16,right=14,avail=W-left-right,systems=[];let cur=null;
   G.ms.forEach((m,mi)=>{
-    const ws=modsW(m,true)+bodies[mi],wm=((m.kc||m.tc)?modsW(m,false):0)+bodies[mi];
+    const ws=modsW(m,true)+bodies[mi],wm=((m.kc||m.tc||[0,1].slice(0,nSt).some(si=>clefChg(si,m)))?modsW(m,false):0)+bodies[mi];
     if(!cur||(cur.w+wm>avail&&cur.ms.length)){cur={ms:[mi],ws:[ws],w:ws};systems.push(cur);}else{cur.ms.push(mi);cur.ws.push(wm);cur.w+=wm;}
   });
   systems.forEach((s,k)=>{
-    if(s.w>avail){const f=avail/s.w;s.ws=s.ws.map(w=>w*f);}
+    s.f=1;
+    // 1段に入りきらない小節（カデンツァなど）は、詰めて重ならせる代わりに段ごと縮小して描く
+    if(s.w>avail){const tight=s.ms.map((mi,j)=>(s.ws[j]-bodies[mi])+Math.max(60,rawW[mi]*1.08+24)),tw=tight.reduce((a,b)=>a+b,0);
+      if(tw>avail){s.f=Math.max(.3,avail/tw);const tgt=avail/s.f;s.ws=tight.map(w=>w*tgt/tw);}
+      else{const f=avail/s.w;s.ws=s.ws.map(w=>w*f);if(s.ws.some((w,j)=>w<tight[j])){const sl=avail-tw,ex=s.ws.map((w,j)=>w-tight[j]);s.ws=tight.map((w,j)=>w+sl*(bodies[s.ms[j]]/s.ms.reduce((a,mi)=>a+bodies[mi],0)));}}}
     else if(k<systems.length-1||s.w>avail*.72){const sb=s.ms.reduce((a,mi)=>a+bodies[mi],0),ex=avail-s.w;s.ws=s.ws.map((w,j)=>w+ex*bodies[s.ms[j]]/sb);}
     s.ly=s.ms.some(mi=>G.by[mi].some(l=>l.some(it=>it.e.ly)));
-    s.h=(nSt>1?GAP+132:150)+(s.ly?26:0);
+    // 段ごとの上下の余白と上下段の間隔を、音符の実際の広がりに合わせる
+    const ex=[0,1].map(si=>[Math.max(4,...s.ms.map(mi=>EXT[mi][si][0])),Math.min(0,...s.ms.map(mi=>EXT[mi][si][1]))]);
+    const ott=S.sp.some(sp=>sp.t==='8va'&&s.ms.some(mi=>G.by[mi].some(l=>l.some(it=>it.e.id===sp.a||it.e.id===sp.b))));
+    s.above=Math.max(30,(ex[0][0]-4)*10+(ott?30:16)+(s.ms[0]===0?14:0));
+    const lo=nSt>1?ex[1][1]:ex[0][1];s.below=Math.max(62,(-lo)*10+40)+(s.ly?26:0);
+    s.gap=nSt>1?Math.max(GAP,(ex[1][0]-ex[0][1])*10+30):0;
+    s.h=s.above+s.gap+40+s.below;
   });
-  const topH=96,Ht=topH+systems.reduce((a,s)=>a+s.h,0)+24;
+  const topH=66,Ht=topH+systems.reduce((a,s)=>a+s.h*s.f,0)+24;
   host.innerHTML='';const box=document.createElement('div');host.appendChild(box);
   const ren=new VF.Renderer(box,VF.Renderer.Backends.SVG);ren.resize(W,Ht);const ctx=ren.getContext();
   const svg=box.querySelector('svg');R.svg=svg;
@@ -577,11 +622,12 @@ function render(){
   const VT=(VF.Volta&&VF.Volta.type)||{BEGIN_END:5};const BT=VF.Barline.type,CT=VF.StaveConnector.type;
   let y=topH;
   systems.forEach((s,sk)=>{
-    const sysRec={y,h:s.h,first:[],last:[]};R.sys.push(sysRec);let x=left;
+    const f=s.f,ox=left*(1-f),oy=y*(1-f),g=ctx.openGroup('sys');if(f!==1)g.setAttribute('transform',`translate(${ox},${oy}) scale(${f})`);
+    const sysRec={y,h:s.h*f,f,ox,oy,g,first:[],last:[],sky:[[],[]],flo:[[],[]]};R.sys.push(sysRec);let x=left;const P=(px,py)=>[ox+f*px,oy+f*py];
     s.ms.forEach((mi,j)=>{
       const m=G.ms[mi],w=s.ws[j],a=S.mA[mi]||{},start=j===0,staves=[];
       for(let si=0;si<nSt;si++){
-        const st=new VF.Stave(x,y+si*GAP,w,{fill_style:'#55524b'});decorateStave(st,m,start,si);
+        const st=new VF.Stave(x,y+s.above-40+si*s.gap,w,{fill_style:'#55524b'});decorateStave(st,m,start,si);
         if(a.beg==='repeat')st.setBegBarType(BT.REPEAT_BEGIN);else if(!start)st.setBegBarType(BT.NONE);
         st.setEndBarType({double:BT.DOUBLE,final:BT.END,repeat:BT.REPEAT_END}[a.end]||BT.SINGLE);
         if(si===0){
@@ -597,76 +643,98 @@ function render(){
         con(a.end==='final'?CT.BOLD_DOUBLE_RIGHT:a.end==='double'?CT.THIN_DOUBLE:CT.SINGLE_RIGHT);}
       const B=buildMeasure(m,G.by[mi],nSt);
       fmtMeasure(B,Math.max(20,staves[0].getNoteEndX()-nsx-14));
-      B.voices.forEach((v,si)=>{try{v.draw(ctx,staves[si]);}catch(e){console.warn(e);}});
+      B.voices.forEach((v,k)=>{try{v.draw(ctx,staves[B.vst[k]]);}catch(e){console.warn(e);}});
       B.beams.forEach(b=>{try{b.setContext(ctx).draw();}catch(_){}});
       B.tuplets.forEach(t=>{try{t.setContext(ctx).draw();}catch(_){}});
+      // 上側の輪郭（スカイライン）: 音符・符幹・連桁・記号・連符数字の一番上を記録し、文字や8vaをその上に置く
+      {const sky=sysRec.sky,add=(si,x0,x1,yy)=>{for(let b=Math.floor(x0/6);b<=Math.floor(x1/6);b++)if(!(sky[si][b]<=yy))sky[si][b]=yy;};
+        staves.forEach((st,si)=>add(si,x,x+w,st.getYForLine(0)-4));
+        for(const it of B.items){const e=it.e,n=it.note;if(e.hid)continue;try{const bb=n.getBoundingBox();let top=bb.getY();let up=true;try{up=n.getStemDirection()===1;}catch(_){}
+          if(e.art&&e.art.length&&(!up||e.r||e.art.includes('ferm')))top-=12;if(e.orn)top-=16;if(e.gr)top-=4;add(it.si%2,bb.getX()-2,bb.getX()+bb.getW()+2,top);
+          let bot=bb.getY()+bb.getH();if(e.art&&e.art.length&&up&&!e.r)bot+=12;const fl=sysRec.flo[it.si%2];for(let b=Math.floor((bb.getX()-2)/6);b<=Math.floor((bb.getX()+bb.getW()+2)/6);b++)if(!(fl[b]>=bot))fl[b]=bot;}catch(_){}}
+        B.tuplets.forEach(t=>{try{const ns=t.notes||t.getNotes();if(!t.location||t.location===1){const y0=t.y_pos!=null?t.y_pos:null;if(y0==null)return;const si=staves.indexOf(ns[0].getStave());add(Math.max(0,si),ns[0].getAbsoluteX()-4,ns[ns.length-1].getAbsoluteX()+12,y0-14);}}catch(_){}});
+        if(start||a.bpm||a.ttxt){if(mi===0||a.bpm||a.ttxt)add(0,x,x+190,staves[0].getYForLine(0)-34);}
+        // 表情記号の文字・コードネームは、その音符の上の空いている高さに書く
+        for(const it of B.items){const e=it.e,n=it.note;if(e.hid)continue;for(const k of ['ch','tx']){if(!e[k])continue;const si=it.si%2,x0=n.getAbsoluteX()-2,tw=String(e[k]).length*(k==='ch'?8:6.4)+4;
+          let top=1e9;for(let b=Math.floor(x0/6);b<=Math.floor((x0+tw)/6);b++)top=Math.min(top,sky[si][b]??1e9);if(top>1e8)top=staves[si].getYForLine(0)-4;const yy=Math.min(top-5,staves[si].getYForLine(0)-8);
+          const t=svgEl('text',{x:x0,y:yy,class:k==='ch'?'chd':'expr'},g);t.textContent=e[k];add(si,x0,x0+tw,yy-12);}}}
       for(const it of B.items){
-        const e=it.e,n=it.note;R.map.set(e.id,{note:n,si:it.si,idx:it.idx,sys:sk,mi,sp:it.sp,e});
+        const e=it.e,n=it.note;R.map.set(e.id,{note:n,si:it.si,idx:it.idx,sys:sk,mi,sp:it.sp,e});if(e.hid)continue;
         if(!sysRec.first[it.si])sysRec.first[it.si]=n;sysRec.last[it.si]=n;
-        try{const bb=n.getBoundingBox();R.hits.push({si:it.si,idx:it.idx,x:bb.getX(),y:bb.getY(),w:bb.getW(),h:bb.getH()});}catch(_){}
-        const stv=staves[it.si],bot=stv.getYForLine(4);
+        try{const bb=n.getBoundingBox(),[hx,hy]=P(bb.getX(),bb.getY());R.hits.push({si:it.si,idx:it.idx,x:hx,y:hy,w:bb.getW()*f,h:bb.getH()*f});}catch(_){}
+        const stv=staves[it.si%2],bot=stv.getYForLine(4);
         if(e.dyn){let yy=bot+33;try{if(!e.r)yy=Math.max(yy,Math.max(...n.getYs())+24);}catch(_){}drawDyn(ctx,e.dyn,n.getAbsoluteX()+5,yy);}
-        if(UI.labels&&!e.r){const t=svgEl('text',{x:n.getAbsoluteX()+5,y:bot+(nSt>1&&it.si===0?54:50),'text-anchor':'middle',class:'lbl'});t.textContent=e.n.map(z=>nameOf(z.m)).join(' ');}
+        if(UI.labels&&!e.r){const t=svgEl('text',{x:n.getAbsoluteX()+5,y:bot+(nSt>1&&it.si%2===0?54:50),'text-anchor':'middle',class:'lbl'},g);t.textContent=e.n.map(z=>nameOf(z.m)).join(' ');}
       }
-      R.mx[mi]={m,staves,sys:sk,x,w,tickX:B.tickX};
+      const [bx,by0]=P(x,staves[0].getYForLine(0)),by1=P(0,staves[staves.length-1].getYForLine(4))[1];
+      R.mx[mi]={m,staves,sys:sk,x,w,tickX:B.tickX,box:{x:bx,w:w*f,y0:by0,y1:by1}};
       x+=w;
     });
-    y+=s.h;
+    ctx.closeGroup();
+    y+=s.h*f;
   });
   drawTies(ctx,nSt);drawSpanners(ctx,nSt);drawCursor();applySel();
-  if(S.omrWarn&&S.omrWarn.length){const first=R.svg.firstChild;S.omrWarn.forEach(mi=>{const mx=R.mx[mi];if(!mx)return;const s0=mx.staves[0],s1=mx.staves[mx.staves.length-1];
-    const r=svgEl('rect',{x:mx.x+1,y:s0.getYForLine(0)-12,width:mx.w-2,height:s1.getYForLine(4)-s0.getYForLine(0)+24,rx:4,class:'owarn'});R.svg.insertBefore(r,first);});}
+  if(S.omrWarn&&S.omrWarn.length){const first=R.svg.firstChild;S.omrWarn.forEach(mi=>{const mx=R.mx[mi];if(!mx)return;const b=mx.box;
+    const r=svgEl('rect',{x:b.x+1,y:b.y0-12,width:b.w-2,height:b.y1-b.y0+24,rx:4,class:'owarn'});R.svg.insertBefore(r,first);});}
 }
+function inSys(ctx,k,fn){const g=R.sys[k]&&R.sys[k].g;if(!g){fn();return;}ctx.groups.push(g);ctx.parent=g;try{fn();}finally{ctx.groups.pop();ctx.parent=ctx.groups[ctx.groups.length-1];}}
 function drawTies(ctx,nSt){
-  for(let si=0;si<nSt;si++){const arr=S.staves[si];
+  for(const si of LISTS()){if(si%2>=nSt)continue;const arr=S.staves[si];
     for(let j=0;j<arr.length-1;j++){const e=arr[j],f=arr[j+1];if(e.r||f.r||!(e.tie||e.n.some(x=>x.t)))continue;
       const A=R.map.get(e.id),B=R.map.get(f.id);if(!A||!B||!A.sp||!B.sp)continue;
       const tied=new Set(e.n.filter(x=>e.tie||x.t).map(x=>x.m)),ia=[],ib=[];A.sp.forEach((s,i)=>{if(!tied.has(s.m))return;const k=B.sp.findIndex(t=>t.m===s.m);if(k>=0){ia.push(i);ib.push(k);}});if(!ia.length)continue;
       const tie=o=>{try{new VF.StaveTie(o).setContext(ctx).draw();}catch(_){}};
-      if(A.sys===B.sys)tie({first_note:A.note,last_note:B.note,first_indices:ia,last_indices:ib});
-      else{tie({first_note:A.note,last_note:null,first_indices:ia,last_indices:ia});tie({first_note:null,last_note:B.note,first_indices:ib,last_indices:ib});}
+      if(A.sys===B.sys)inSys(ctx,A.sys,()=>tie({first_note:A.note,last_note:B.note,first_indices:ia,last_indices:ib}));
+      else{inSys(ctx,A.sys,()=>tie({first_note:A.note,last_note:null,first_indices:ia,last_indices:ia}));inSys(ctx,B.sys,()=>tie({first_note:null,last_note:B.note,first_indices:ib,last_indices:ib}));}
     }}
 }
 function drawSpanners(ctx,nSt){
   for(const sp of S.sp){
-    if(sp.s>=nSt)continue;let A=R.map.get(sp.a),B=R.map.get(sp.b);if(!A||!B)continue;
+    if(sp.s%2>=nSt)continue;let A=R.map.get(sp.a),B=R.map.get(sp.b);if(!A||!B)continue;
     if(A.idx>B.idx)[A,B]=[B,A];
     for(let k=A.sys;k<=B.sys;k++){
       const n1=k===A.sys?A.note:R.sys[k].first[sp.s],n2=k===B.sys?B.note:R.sys[k].last[sp.s];if(!n1||!n2)continue;
-      try{
+      inSys(ctx,k,()=>{try{
         if(sp.t==='slur'){if(n1!==n2)new VF.Curve(n1,n2,{thickness:2,cps:[{x:0,y:12},{x:0,y:12}]}).setContext(ctx).draw();}
-        else if(sp.t==='cresc'||sp.t==='dim'){if(n1===n2)continue;const hp=new VF.StaveHairpin({first_note:n1,last_note:n2},sp.t==='cresc'?1:2);hp.setContext(ctx);hp.setPosition(4);hp.setRenderOptions({height:9,y_shift:-6,left_shift_px:k===A.sys&&A.e.dyn?22:0,right_shift_px:k===B.sys&&B.e.dyn?-16:-4});hp.draw();}
-        else if(sp.t==='8va'||sp.t==='8vb')new VF.TextBracket({start:n1,stop:n2,text:'8',superscript:sp.t==='8va'?'va':'vb',position:sp.t==='8va'?1:-1}).setContext(ctx).draw();
+        else if(sp.t==='cresc'||sp.t==='dim'){if(n1===n2)return;const hp=new VF.StaveHairpin({first_note:n1,last_note:n2},sp.t==='cresc'?1:2);hp.setContext(ctx);hp.setPosition(4);const st0=n1.checkStave?n1.checkStave():n1.getStave(),fl=R.sys[k].flo[sp.s%2]||[];let fb=-1e9;for(let b=Math.floor(n1.getAbsoluteX()/6);b<=Math.floor((n2.getAbsoluteX()+12)/6);b++)if(fl[b]!=null)fb=Math.max(fb,fl[b]);
+          const base=st0.getY()+st0.getHeight()+20,ysh=Math.max(-6,fb+6-base);hp.setRenderOptions({height:9,y_shift:ysh,left_shift_px:k===A.sys&&A.e.dyn?22:0,right_shift_px:k===B.sys&&B.e.dyn?-16:-4});hp.draw();}
+        else if(sp.t==='8va'||sp.t==='8vb'){const up=sp.t==='8va',x1=n1.getAbsoluteX(),x2=n2.getAbsoluteX();let top=1e9,bot=-1e9;
+          for(const v of R.map.values()){if(v.sys!==k||v.si%2!==sp.s%2||v.e.hid)continue;const x=v.note.getAbsoluteX();if(x<x1-1||x>x2+1)continue;try{if(v.e.r)continue;const ys=v.note.getYs();top=Math.min(top,...ys);bot=Math.max(bot,...ys);}catch(_){}}
+          if(up){const sky=R.sys[k].sky[sp.s%2]||[];for(let b=Math.floor((x1-4)/6);b<=Math.floor((x2+16)/6);b++)if(sky[b]!=null)top=Math.min(top,sky[b]);}
+          const st=n1.getStave(),tb=new VF.TextBracket({start:n1,stop:n2,text:'8',superscript:up?'va':'vb',position:up?1:-1});let line=1;
+          if(st){if(up)while(line<20&&st.getYForTopText(line)>top-10)line++;else while(line<14&&st.getYForBottomText(line)<bot+14)line++;}
+          tb.setLine(line);tb.setContext(ctx).draw();}
         else if(sp.t==='ped'){const pm=new VF.PedalMarking([n1,n2]);pm.setType(VF.PedalMarking.type.TEXT);pm.setContext(ctx).draw();}
-      }catch(e){console.warn(e);}
+      }catch(e){console.warn(e);}});
     }
   }
 }
 function cursorPos(si){
   const t=staffEnd(si),G=R.G;if(!G)return null;
   const mi=G.ms.findIndex(m=>t>=m.start&&t<m.start+m.cap);const mx=R.mx[mi<0?G.ms.length-1:mi];if(!mx)return null;
-  const st=mx.staves[si];if(!st)return null;let x=null;
+  const st=mx.staves[si%2];if(!st)return null;let x=null;
   const all=mx.tickX.flat();const hit=all.find(o=>o.t===t);
   if(hit)x=hit.note.getAbsoluteX()-7;else if(t<=mx.m.start)x=st.getNoteStartX()+4;
   else{const prev=all.filter(o=>o.t<t).sort((a,b)=>b.t-a.t)[0];x=prev?prev.note.getAbsoluteX()+24:st.getNoteStartX()+4;}
-  return {x,y1:st.getYForLine(0)-13,y2:st.getYForLine(4)+13,sys:mx.sys};
+  const Sy=R.sys[mx.sys]||{f:1,ox:0,oy:0};
+  return {x:Sy.ox+Sy.f*x,y1:Sy.oy+Sy.f*(st.getYForLine(0)-13),y2:Sy.oy+Sy.f*(st.getYForLine(4)+13),sys:mx.sys};
 }
 function drawCursor(){
   if(sel||!R.svg)return;
-  for(let si=0;si<nStaves();si++){const c=cursorPos(si);if(!c)continue;
+  for(let si=0;si<nStaves();si++){const c=cursorPos(si+(UI.voice===2?2:0));if(!c)continue;
     svgEl('line',{x1:c.x,y1:c.y1,x2:c.x,y2:c.y2,class:'cur'});svgEl('rect',{x:c.x-4,y:c.y1-6,width:8,height:6,rx:2,class:'curcap'});}
 }
 function applySel(){
   if(!R.svg)return;
   R.svg.querySelectorAll('.sel-n').forEach(el=>el.classList.remove('sel-n'));R.svg.querySelectorAll('.mhl').forEach(el=>el.remove());
   if(sel){for(let i=sel.a;i<=sel.b;i++){const e=S.staves[sel.si][i];const r=e&&R.map.get(e.id);const el=r&&r.note.getSVGElement&&r.note.getSVGElement();if(el)el.classList.add('sel-n');}}
-  else if(selM!=null&&R.mx[selM]){const mx=R.mx[selM],s0=mx.staves[0],s1=mx.staves[mx.staves.length-1];
-    svgEl('rect',{x:mx.x+1,y:s0.getYForLine(0)-10,width:mx.w-2,height:s1.getYForLine(4)-s0.getYForLine(0)+20,rx:4,class:'mhl'});}
+  else if(selM!=null&&R.mx[selM]){const b=R.mx[selM].box;
+    svgEl('rect',{x:b.x+1,y:b.y0-10,width:b.w-2,height:b.y1-b.y0+20,rx:4,class:'mhl'});}
 }
 function scrollToCursor(){
   const stg=$('#stage');let y=null;
   if(sel){const e=S.staves[sel.si][sel.a],r=e&&R.map.get(e.id);if(r)y=R.sys[r.sys];}
-  else{const c=cursorPos(UI.lastSi<nStaves()?UI.lastSi:0);if(c)y=R.sys[c.sys];}
+  else{const c=cursorPos(UI.lastSi%2<nStaves()?UI.lastSi:0);if(c)y=R.sys[c.sys];}
   if(!y||!R.svg)return;
   const rect=R.svg.getBoundingClientRect(),sr=stg.getBoundingClientRect();
   const top=rect.top-sr.top+stg.scrollTop+y.y*R.scale,bot=top+y.h*R.scale;
@@ -686,7 +754,7 @@ function selectEv(si,idx,extend){
   render();updateUI();
 }
 function moveSel(d,extend){
-  if(!sel){const si=UI.lastSi<nStaves()?UI.lastSi:0,n=S.staves[si].length;if(n)selectEv(si,n-1);return;}
+  if(!sel){const si=UI.lastSi%2<nStaves()?UI.lastSi:0,n=S.staves[si].length;if(n)selectEv(si,n-1);return;}
   const n=S.staves[sel.si].length;
   if(extend){const nb=clamp((sel.b>sel.anchor||sel.a===sel.anchor?sel.b:sel.a)+d,0,n-1);sel={...sel,a:Math.min(sel.anchor,nb),b:Math.max(sel.anchor,nb)};render();updateUI();return;}
   const i=clamp((d>0?sel.b:sel.a)+d,0,n);if(i>=n){sel=null;render();updateUI();return;}selectEv(sel.si,i);
@@ -706,13 +774,13 @@ function accidental(kind){
 }
 function setDuration(d,dots,tup){
   UI.dur=d;UI.dots=dots;UI.tup=tup;
-  if(sel){hist();const si=sel.si;selEvents().forEach(({e})=>{e.d=d;e.dots=dots;if(tup)e.tup=3;else delete e.tup;});reflow(si);sel.b=Math.min(sel.b,S.staves[si].length-1);sel.a=Math.min(sel.a,sel.b);changed();}
+  if(sel){hist();const si=sel.si;selEvents().forEach(({e})=>{e.d=d;e.dots=dots;delete e.tk;delete e.tn;delete e.tg;delete e.th;if(tup)e.tup=3;else delete e.tup;});reflow(si);sel.b=Math.min(sel.b,S.staves[si].length-1);sel.a=Math.min(sel.a,sel.b);changed();}
   else updateUI();
 }
 function deleteSel(){
   stopPlayback();
   if(sel){hist();const {si,a,b}=sel;const rm=S.staves[si].splice(a,b-a+1);pruneSp(rm);reflow(si);const n=S.staves[si].length;sel=a>0&&n?{si,a:Math.min(a-1,n-1),b:Math.min(a-1,n-1),anchor:Math.min(a-1,n-1)}:null;changed();return;}
-  let si=UI.lastSi<nStaves()?UI.lastSi:0;if(!S.staves[si].length)si=1-si;if(si>=nStaves()||!S.staves[si].length)return;
+  let si=UI.lastSi%2<nStaves()?UI.lastSi:0;if(!S.staves[si].length)si=si^1;if(si%2>=nStaves()||!S.staves[si].length)return;
   hist();pruneSp(S.staves[si].splice(-1,1));lastGroup=null;changed({scroll:true});
 }
 function pruneSp(rm){const ids=new Set(rm.map(e=>e.id));S.sp=S.sp.filter(s=>!ids.has(s.a)&&!ids.has(s.b));}
@@ -728,7 +796,9 @@ function addSpanner(type){
 }
 
 /* ================= 入力ルーティング ================= */
-function route(m){if(S.layout!=='grand')return 0;if(UI.target==='upper')return 0;if(UI.target==='lower')return 1;return m>=60?0:1;}
+function route0(m){if(S.layout!=='grand')return 0;if(UI.target==='upper')return 0;if(UI.target==='lower')return 1;return m>=60?0:1;}
+const route=m=>route0(m)+(UI.voice===2?2:0);
+function v2Start(li){const e1=S.staves[li-2],T1=staffEnd(li-2),T2=staffEnd(li);let t=0,last=0;for(const e of e1){last=t;t+=evTicks(e);}const ms=measureAt(e1.length?last:T1).start;return T2>=ms?T2:ms;}
 function groupStaff(ms){const g={};ms.forEach(m=>{const si=route(m);(g[si]=g[si]||[]).push(m);});return g;}
 function enterChord(ms,opt={}){
   ms=[...new Set(ms)].filter(m=>m>=LOWK&&m<=HIGHK).sort((a,b)=>a-b);if(!ms.length)return;
@@ -739,14 +809,14 @@ function enterChord(ms,opt={}){
       else{e.r=false;e.n=ms.map(m=>({m}));const nx=sel.a+1;sel=nx<S.staves[sel.si].length?{si:sel.si,a:nx,b:nx,anchor:nx}:null;}}
     changed({scroll:true});return;}
   if(add){const evs=lastEvents();if(evs.length){ms.forEach(m=>{const si=route(m),t=evs.find(x=>x.si===si)||evs[0];if(!t.e.n.some(x=>x.m===m)){t.e.n.push({m});t.e.r=false;}});changed();return;}}
-  const g=groupStaff(ms),sis=Object.keys(g).map(Number),T=Math.max(...sis.map(staffEnd)),ids=[];
-  for(const si of sis){padTo(si,T);const tpl={id:uid(),r:false,n:g[si].map(m=>({m})),d:UI.dur,dots:UI.dots};if(UI.tup)tpl.tup=3;appendEv(si,tpl);ids.push(tpl.id);UI.lastSi=si;}
+  const g=groupStaff(ms),sis=Object.keys(g).map(Number),T=Math.max(...sis.filter(si=>si<2).map(staffEnd),0),ids=[];
+  for(const si of sis){padTo(si,si>=2?v2Start(si):T);const tpl={id:uid(),r:false,n:g[si].map(m=>({m})),d:UI.dur,dots:UI.dots};if(UI.tup)tpl.tup=3;appendEv(si,tpl);ids.push(tpl.id);UI.lastSi=si;}
   lastGroup={ids};changed({scroll:true});
 }
 function enterRest(){
   stopPlayback();hist();
   if(sel){selEvents().forEach(({e})=>{e.r=true;e.n=[];e.tie=false;delete e.orn;delete e.arp;});changed();return;}
-  const si=S.layout!=='grand'?0:UI.target==='lower'?1:UI.target==='upper'?0:(UI.lastSi||0);
+  const si=(S.layout!=='grand'?0:UI.target==='lower'?1:UI.target==='upper'?0:(UI.lastSi||0)%2)+(UI.voice===2?2:0);if(si>=2)padTo(si,v2Start(si));
   const tpl={id:uid(),r:true,n:[],d:UI.dur,dots:UI.dots};if(UI.tup)tpl.tup=3;appendEv(si,tpl);lastGroup={ids:[tpl.id]};UI.lastSi=si;changed({scroll:true});
 }
 const PEND={ms:[],timer:0,add:false};
@@ -795,7 +865,7 @@ function initAudio(){
     comp=AC.createDynamicsCompressor();comp.threshold.value=-16;comp.knee.value=18;comp.ratio.value=4;comp.attack.value=.004;comp.release.value=.25;
     master=AC.createGain();master.gain.value=.85;dry=AC.createGain();dry.gain.value=.9;wet=AC.createGain();wet.gain.value=.32;
     const conv=AC.createConvolver();conv.buffer=impulse(2.6);const tone=AC.createBiquadFilter();tone.type='lowpass';tone.frequency.value=5200;
-    dry.connect(comp);wet.connect(conv);conv.connect(tone);tone.connect(comp);comp.connect(master);master.connect(AC.destination);return true;
+    dry.connect(comp);wet.connect(conv);conv.connect(tone);tone.connect(comp);comp.connect(master);master.connect(AC.destination);pianoLoad();return true;
   }catch(e){console.error(e);return false;}
 }
 function makeVoice(m,vel,t){
@@ -810,7 +880,39 @@ function makeVoice(m,vel,t){
   lp.connect(out);out.connect(dry);out.connect(wet);const end=t+dec*1.6;oscs.forEach(o=>{try{o.stop(end);}catch(_){}});
   return {out,oscs,end,release(at,quick){try{const g=out.gain;g.cancelScheduledValues(at);if(at<=AC.currentTime+.001)g.setValueAtTime(g.value,at);g.setTargetAtTime(0,at,quick?.015:.11);const st=at+(quick?.12:.8);if(st<end)oscs.forEach(o=>{try{o.stop(st);}catch(_){}});}catch(_){}}};
 }
-function noteOn(m,vel=.8){if(!initAudio())return null;noteOff(m,true);const v=makeVoice(m,vel,AC.currentTime);voices[m]=v;return v;}
+/* ---- 録音ピアノ音源: Salamander Grand Piano（Alexander Holm, CC BY 3.0）。読めないときは上の合成音で鳴らす ---- */
+const PIANO={url:'https://tonejs.github.io/audio/salamander/',raw:new Map(),buf:new Map(),state:'idle',ok:0,fail:0};
+const SMP=(()=>{const o=[];for(let m=21;m<=108;m+=3)o.push(m);return o;})();
+const smpName=m=>['C','Cs','D','Ds','E','F','Fs','G','Gs','A','As','B'][m%12]+(Math.floor(m/12)-1);
+const soundKind=()=>{try{return localStorage.getItem('scorepiano.sound')||'sample';}catch(_){return 'sample';}};
+function pianoStatus(){const el=$('#sndState');if(!el)return;const k=soundKind();
+  el.textContent=k!=='sample'?'合成音':PIANO.state==='ready'?'録音ピアノ':PIANO.state==='loading'?`読込中 ${PIANO.ok}/${SMP.length}`:PIANO.state==='fail'?'読込失敗（合成音で再生）':'未読込';}
+function pianoFetch(){if(soundKind()!=='sample'||PIANO.raw.size)return;
+  for(const m of SMP){const pr=fetch(PIANO.url+smpName(m)+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();});pr.catch(()=>{});PIANO.raw.set(m,pr);}}
+function pianoLoad(){
+  if(!AC||soundKind()!=='sample'||PIANO.state!=='idle')return;pianoFetch();PIANO.state='loading';pianoStatus();
+  const dec=ab=>new Promise((res,rej)=>{try{const p=AC.decodeAudioData(ab,res,rej);if(p&&p.then)p.then(res,rej);}catch(e){rej(e);}});
+  Promise.all(SMP.map(m=>PIANO.raw.get(m).then(dec).then(b=>{
+      // MP3 先頭の無音を飛ばして、鍵盤を押してから鳴るまでの遅れをなくす
+      const d=b.getChannelData(0);let pk=0;const lim=Math.min(d.length,Math.round(b.sampleRate*.25));for(let i=0;i<lim;i++)pk=Math.max(pk,Math.abs(d[i]));let i0=0;while(i0<lim&&Math.abs(d[i0])<pk*.05)i0++;
+      PIANO.buf.set(m,{b,m,off:Math.max(0,i0/b.sampleRate-.003)});PIANO.ok++;pianoStatus();}).catch(()=>{PIANO.fail++;})))
+    .then(()=>{PIANO.state=PIANO.ok?'ready':'fail';pianoStatus();if(!PIANO.ok)toast('録音ピアノ音源を読み込めませんでした（オフライン？）。合成音で鳴らします',4000);});
+}
+function sampleFor(m){let best=null;for(const [sm,o] of PIANO.buf){if(Math.abs(sm-m)>4)continue;if(!best||Math.abs(sm-m)<Math.abs(best.m-m))best=o;}return best;}
+function makeSampleVoice(m,vel,t,S0){
+  const v=clamp(vel,.05,1),src=AC.createBufferSource();src.buffer=S0.b;const rate=Math.pow(2,(m-S0.m)/12);src.playbackRate.value=rate;
+  // 強く弾くほど明るく・大きく（録音は1段階なので、フィルタと音量で強弱を表現）
+  const lp=AC.createBiquadFilter();lp.type='lowpass';lp.Q.value=.4;lp.frequency.setValueAtTime(Math.min(18000,900+v*v*13000+(m-21)*70),t);
+  const out=AC.createGain(),peak=.06+.7*Math.pow(v,1.6);out.gain.setValueAtTime(peak,t);
+  let node=out;if(AC.createStereoPanner){const pn=AC.createStereoPanner();pn.pan.value=clamp((m-64)/64*.35,-.35,.35);out.connect(pn);node=pn;}
+  src.connect(lp);lp.connect(out);node.connect(dry);node.connect(wet);src.start(t,S0.off);
+  const end=t+(S0.b.duration-S0.off)/rate;try{src.stop(end+.05);}catch(_){}
+  // 最高音域（F6以上）はダンパーがないので、離しても余韻が残る
+  const tau=m>=89?.9:clamp(.2-(m-21)*.0018,.05,.2);
+  return {out,end,release(at,quick){try{const g=out.gain;g.cancelScheduledValues(at);if(at<=AC.currentTime+.001)g.setValueAtTime(g.value,at);g.setTargetAtTime(0,at,quick?.015:tau);const st=at+(quick?.1:tau*7);if(st<end)src.stop(st);}catch(_){}}};
+}
+function pianoVoice(m,vel,t){if(soundKind()==='sample'){if(PIANO.state==='idle')pianoLoad();const S0=sampleFor(m);if(S0){wet.gain.value=.16;return makeSampleVoice(m,vel,t,S0);}}wet.gain.value=.32;return makeVoice(m,vel,t);}
+function noteOn(m,vel=.8){if(!initAudio())return null;noteOff(m,true);const v=pianoVoice(m,vel,AC.currentTime);voices[m]=v;return v;}
 function noteOff(m,quick=false){const v=voices[m];if(!v||!AC)return;v.release(AC.currentTime,quick);delete voices[m];}
 
 /* ================= 再生 / メトロノーム ================= */
@@ -822,8 +924,8 @@ function measureOrder(n){const ord=[];let i=0,start=0,from=-1,second=false;const
   return ord;}
 function linearNotes(){
   const nSt=nStaves(),out=[],ped=[];
-  for(const sp of S.sp){if(sp.t!=='ped'||sp.s>=nSt)continue;const A=findEv(sp.a),B=findEv(sp.b);if(!A||!B)continue;const ta=tickOf(A.si,A.idx),tb=tickOf(B.si,B.idx)+evTicks(B.e);ped.push([Math.min(ta,tb),Math.max(ta,tb)]);}
-  for(let si=0;si<nSt;si++){const arr=S.staves[si];let t=0,vel=.64;
+  for(const sp of S.sp){if(sp.t!=='ped'||sp.s%2>=nSt)continue;const A=findEv(sp.a),B=findEv(sp.b);if(!A||!B)continue;const ta=tickOf(A.si,A.idx),tb=tickOf(B.si,B.idx)+evTicks(B.e);ped.push([Math.min(ta,tb),Math.max(ta,tb)]);}
+  for(const li of LISTS()){const si=li%2;if(si>=nSt)continue;const arr=S.staves[li];let t=0,vel=.64;
     arr.forEach((e,j)=>{let v=vel;if(e.dyn){v=DYNV[e.dyn]||vel;vel=e.dyn==='sfz'?vel:e.dyn==='fp'?DYNV.p:v;}
       if(!e.r){const art=e.art||[];if(art.includes('acc'))v+=.14;if(art.includes('marc'))v+=.2;
         const tiesTo=(a,m)=>!a.r&&a.n.some(y=>y.m===m&&(a.tie||y.t));
@@ -852,13 +954,13 @@ function startPlayback(){
   const {items}=timeline();if(!items.length){toast('譜面が空です');return;}
   initAudio();let list=items;
   if(sel){const e=S.staves[sel.si][sel.a];if(e){const tk=tickOf(sel.si,sel.a),f=items.find(x=>x.tick>=tk);if(f){const off=f.t;list=items.filter(x=>x.t>=off-1e-6).map(x=>({...x,t:x.t-off}));}}}
-  PB.items=list;PB.ptr=0;PB.on=true;PB.t0=AC.currentTime+.1;PB.end=Math.max(...list.map(x=>x.t+x.d));
+  PB.items=list;PB.ptr=0;PB.on=true;PB.last={};PB.t0=AC.currentTime+.1;PB.end=Math.max(...list.map(x=>x.t+x.d));
   if(MET.on)metStart(PB.t0);
   pbSchedule();PB.timer=setInterval(pbSchedule,100);PB.raf=requestAnimationFrame(pbFrame);
   $('#play').innerHTML='❚❚<span class="hide-s">停止</span>';
 }
 function pbSchedule(){
-  const now=AC.currentTime;while(PB.ptr<PB.items.length&&PB.t0+PB.items[PB.ptr].t<now+.5){const it=PB.items[PB.ptr++],at=Math.max(now,PB.t0+it.t);const v=makeVoice(it.m,it.vel,at);v.release(at+it.d);PB.vs.push(v);}
+  const now=AC.currentTime;while(PB.ptr<PB.items.length&&PB.t0+PB.items[PB.ptr].t<now+.5){const it=PB.items[PB.ptr++],at=Math.max(now,PB.t0+it.t);const pv=PB.last&&PB.last[it.m];if(pv&&pv.relAt>at)pv.v.release(at,true);const v=pianoVoice(it.m,it.vel,at);v.release(at+it.d);PB.vs.push(v);(PB.last=PB.last||{})[it.m]={v,relAt:at+it.d};}
   PB.vs=PB.vs.filter(v=>v.end>now);
   if(PB.ptr>=PB.items.length&&now>PB.t0+PB.end+.2)stopPlayback(true);
 }
@@ -1077,11 +1179,14 @@ function parseMidi(buf){
   const base=p;if(str(4)!=='MThd')throw new Error('MIDIヘッダーがありません');const hl=r32();r16();const nt=r16(),div=r16();p=base+8+hl;
   const names={},dec=bytes=>{try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch(_){try{return new TextDecoder('shift_jis').decode(bytes);}catch(__){return '';}}};
   if(div&0x8000)throw new Error('SMPTE形式のMIDIには未対応です');
-  const notes=[];let tempo=0,ts=null,ks=null;
+  const notes=[],tsAll=[],ksAll=[],tpAll=[];let tempo=0,ts=null,ks=null,mi=0;
   for(let ti=0;ti<nt&&p<v.length-8;ti++){
     if(str(4)!=='MTrk')break;const len=r32(),end=Math.min(v.length,p+len);let tick=0,rs=0;const act=new Map();
     while(p<end){tick+=vlq();let st=v[p];if(st<0x80)st=rs;else{p++;if(st<0xF0)rs=st;}
-      if(st===0xFF){const ty=v[p++],l=vlq();if(ty===0x03&&names[ti]==null)names[ti]=dec(v.slice(p,p+l)).replace(/\0/g,'').trim();else if(ty===0x51&&!tempo)tempo=(v[p]<<16)|(v[p+1]<<8)|v[p+2];else if(ty===0x58&&!ts)ts=[v[p],Math.pow(2,v[p+1])];else if(ty===0x59&&ks==null)ks=(v[p]<<24)>>24;p+=l;continue;}
+      if(st===0xFF){const ty=v[p++],l=vlq();if(ty===0x03&&names[ti]==null)names[ti]=dec(v.slice(p,p+l)).replace(/\0/g,'').trim();
+        else if(ty===0x51){const u=(v[p]<<16)|(v[p+1]<<8)|v[p+2];if(!tempo)tempo=u;if(u)tpAll.push({t:tick,bpm:6e7/u});}
+        else if(ty===0x58){const x=[v[p],Math.pow(2,v[p+1])];if(!ts)ts=x;tsAll.push({t:tick,n:x[0],d:x[1]});}
+        else if(ty===0x59){const k=(v[p]<<24)>>24;if(ks==null){ks=k;mi=v[p+1]|0;}ksAll.push({t:tick,k,mi:v[p+1]|0});}p+=l;continue;}
       if(st===0xF0||st===0xF7){p+=vlq();continue;}
       const c=st&0xF0,ch=st&15;
       if(c===0x90||c===0x80){const n=v[p++],vel=v[p++],k=ch*128+n;
@@ -1089,7 +1194,7 @@ function parseMidi(buf){
         else{const a=act.get(k);if(a){notes.push({m:n,on:a.t,off:tick,tr:ti,ch});act.delete(k);}}}
       else if(c===0xC0||c===0xD0)p+=1;else p+=2;}
     act.forEach((a,k)=>notes.push({m:k%128,on:a.t,off:tick,tr:ti,ch:k>>7}));p=end;}
-  return {ppq:div,notes,tempo:tempo?Math.round(6e7/tempo):0,ts,ks,names};
+  return {ppq:div,notes,tempo:tempo?Math.round(6e7/tempo):0,ts,ks,mi,names,tsAll,ksAll,tpAll};
 }
 let MIMP=null;
 async function importMidi(file){
@@ -1114,32 +1219,97 @@ function runMidiImport(){
   const keep=S;S=newScore(keep);S.title=MIMP.title;S.layout='grand';
   if(d.ts&&d.ts[0]>0&&[1,2,4,8,16].includes(d.ts[1])){S.time=d.ts;S.timeSym='';}if(d.ks!=null&&d.ks>=-7&&d.ks<=7)S.key=d.ks;if(d.tempo)S.tempo=clamp(d.tempo,30,220);
   const sc=Q/d.ppq,st=[[],[]],qm=$('#mmQ').value;
+  midiMeasureMap(d,sc,Math.max(...ns.map(n=>n.off))*sc);
+  if(d.mi===1)S.mode='minor';else{const c=new Array(12).fill(0);ns.forEach(n=>c[n.m%12]++);const lt=((7*S.key+8)%12+12)%12;if(S.key>=2&&c[lt]>.03*ns.length)S.mode='minor';}
   for(const n of ns){const t=trs.find(x=>x.tr===n.tr);if(!t||t.to==='x')continue;const si=t.to==='split'?(n.m>=60?0:1):+t.to;st[si].push({m:n.m,on:n.on*sc,off:n.off*sc});}
   let cnt=0;for(const si of [0,1]){cnt+=st[si].length;midiToStaff(si,st[si],qm);}
   if(!st[1].length)S.layout='single';
+  autoClefOttava();
   sel=null;lastGroup=null;syncSettings();changed();$('#stage').scrollTop=0;toast(`MIDI取り込み完了 · ${cnt}音`);
 }
+// 読みやすさ: 音域に合わせて音部記号を切り替え、極端に高い/低い音列にオッターヴァを付ける
+function autoClefOttava(){
+  S.clefCh=[];const ms=measures(maxEnd());
+  for(const si of [0,1].slice(0,nStaves())){const arr=S.staves[si];let t=0,j=0;const sum=ms.map(()=>({s:0,c:0}));
+    for(const e of arr){while(j<ms.length-1&&t>=ms[j].start+ms[j].cap)j++;if(!e.r)e.n.forEach(x=>{sum[j].s+=x.m;sum[j].c++;});t+=evTicks(e);}
+    let cur=null;sum.forEach((o,i)=>{if(!o.c)return;const av=o.s/o.c;let nx=cur||(si===0?(av<=52?'bass':'treble'):(av>=64?'treble':'bass'));
+      if(cur==='bass'&&av>=65)nx='treble';else if(cur==='treble'&&av<=54)nx='bass';
+      if(cur==null)S.clefs[si]=nx;else if(nx!==cur)S.clefCh.push({s:si,t:ms[i].start,c:nx});cur=nx;});}
+  const seg=(si,type,inR,isPeak)=>{const arr=S.staves[si];let a=-1,peak=false,cnt=0;
+    const close=k=>{if(a>=0&&peak&&cnt>=3){let b=k;while(b>a&&arr[b].r)b--;S.sp.push({t:type,s:si,a:arr[a].id,b:arr[b].id});}a=-1;peak=false;cnt=0;};
+    arr.forEach((e,k)=>{if(e.r){if(a>=0&&evTicks(e)>480)close(k-1);return;}const ok=e.n.every(x=>inR(x.m));if(!ok){close(k-1);return;}if(a<0)a=k;cnt++;if(e.n.some(x=>isPeak(x.m)))peak=true;});close(arr.length-1);};
+  const tc=(si,t)=>clefAt(si,t);
+  seg(0,'8va',m=>m>=74,m=>m>=91);
+  if(nStaves()>1)seg(1,'8vb',m=>m<=50,m=>m<=31);
+}
+// 拍子・調・テンポの変化を小節に反映（短期間だけの拍子変化は「長さの違う小節」として扱う）
+function midiMeasureMap(d,sc,end){
+  const okTs=x=>x&&x.n>0&&[1,2,4,8,16,32].includes(x.d);
+  const tsl=[];(d.tsAll||[]).filter(okTs).map(x=>({t:Math.round(x.t*sc),n:x.n,d:x.d})).sort((a,b)=>a.t-b.t).forEach(x=>{if(tsl.length&&tsl[tsl.length-1].t===x.t)tsl.pop();tsl.push(x);});
+  if(!tsl.length)return;
+  const ms=[];let t=0,k=0;while(t<end-1&&ms.length<20000){while(k+1<tsl.length&&tsl[k+1].t<=t+Q/8)k++;const x=tsl[k],cap=Math.round(x.n*WH/x.d);ms.push({t,cap,n:x.n,d:x.d});t+=cap;}
+  const main=[tsl[0].n,tsl[0].d];S.time=main;S.timeSym='';let shown=main;
+  for(let i=0;i<ms.length;){let j=i;while(j<ms.length&&ms[j].n===ms[i].n&&ms[j].d===ms[i].d)j++;
+    const same=ms[i].n===shown[0]&&ms[i].d===shown[1];
+    if(!same){if(j-i<=3)for(let q=i;q<j;q++)(S.mA[q]=S.mA[q]||{}).len=ms[q].cap;
+      else{shown=[ms[i].n,ms[i].d];(S.mA[i]=S.mA[i]||{}).time=shown;S.mA[i].tsym='';}}
+    i=j;}
+  const mAt=tt=>{let i=0;while(i+1<ms.length&&ms[i+1].t<=tt)i++;return i;};
+  let kk=S.key;(d.ksAll||[]).forEach(x=>{if(x.k<-7||x.k>7)return;const i=mAt(Math.round(x.t*sc));if(i===0){S.key=x.k;kk=x.k;return;}if(x.k!==kk){(S.mA[i]=S.mA[i]||{}).key=x.k;kk=x.k;}});
+  const tAt=tt=>{let b=null;for(const x of d.tpAll||[])if(x.t*sc<=tt+1)b=x.bpm;return b;};
+  let bp=S.tempo;ms.forEach((m,i)=>{if(!i)return;const b=tAt(m.t),b2=i+1<ms.length?tAt(ms[i+1].t-1):b;if(b&&Math.abs(b-b2)<1&&Math.abs(b-bp)>=2){(S.mA[i]=S.mA[i]||{}).bpm=clamp(Math.round(b),20,300);bp=b;}});
+}
 function midiToStaff(si,N,qm){
-  if(!N.length)return;const B=Q,grid=new Map(),G=qm==='auto'?0:+qm;
-  const H2=B/2;
-  if(!G){const per=new Map();N.forEach(n=>{const h=Math.floor((n.on+20)/H2),r=n.on-h*H2,o=per.get(h)||{eb:0,et:0,c:0};o.eb+=Math.abs(r-Math.round(r/60)*60);o.et+=Math.abs(r-Math.round(r/80)*80);o.c++;per.set(h,o);});
-    const st=h=>{const o=per.get(h);if(!o)return 'none';if(o.eb<4&&o.et<4)return 'neutral';return o.et+6*o.c<o.eb?'tri':'bin';};
-    new Set([...per.keys()].map(h=>h>>1)).forEach(b=>{const a=st(2*b),c=st(2*b+1);
+  if(!N.length)return;const B=Q,grid=new Map(),g30=new Set(),G=qm==='auto'?0:+qm;
+  const H2=B/2;N=N.map(n=>({...n})).sort((a,b)=>a.on-b.on||a.m-b.m);
+  const offR=t=>Math.min(Math.abs(t-Math.round(t/60)*60),Math.abs(t-Math.round(t/80)*80))>=3;
+  // 0) アルペジオ（下から順にずれて鳴り、同時に止まる和音）→ 和音＋アルペジオ記号
+  if(!G)for(let i=0;i<N.length;i++){const a=N[i];if(a.arpd)continue;let pv=a;const grp=[a];
+    for(let j=i+1;j<N.length&&N[j].on-a.on<=180;j++){const b=N[j];if(b.arpd||b.on===a.on)continue;const d=b.on-pv.on;
+      if(d>0&&d<=70&&Math.abs(b.off-a.off)<=15&&b.m>pv.m&&offR(b.on)){grp.push(b);pv=b;}}
+    if(grp.length>=2){grp.forEach((b,k)=>{if(k){b.on=a.on;b.arpd=1;}});a.arp=1;}}
+  // 1) 5連・7連・16連など、等間隔で2進/3連の格子に乗らない音列 → 連符グループ
+  const REG=[],onMap=new Map(),meas=measures(Math.max(...N.map(n=>n.off))+WH);
+  if(!G){const U=[];[...new Set(N.map(n=>n.on))].sort((a,b)=>a-b).forEach(t=>{if(!U.length||t-U[U.length-1]>2)U.push(t);});
+    const std=[20,30,40,60,80,120,160,240],odd=d=>std.every(g=>Math.abs(d-g)>.5);
+    const mStart=t=>{let m=meas[0];for(const x of meas){if(x.start<=t+1)m=x;else break;}return m;};
+    let i=0;while(i<U.length-3){const d0=U[i+1]-U[i];if(d0>130||d0<18){i++;continue;}
+      const m0=mStart(U[i]),bt=(m0.time[1]===8&&m0.time[0]%3===0)?720:WH/m0.time[1];let ok=null;
+      for(const c of [...new Set([bt,bt/2,240,480,720,360,960,2*bt,1440])]){const kk=Math.round(c/d0);if(kk<4||Math.abs(c/d0-kk)>.15||i+kk>U.length||!odd(c/kk))continue;
+        let good=true;for(let q=1;q<kk&&good;q++)if(Math.abs(U[i+q]-(U[i]+q*c/kk))>3)good=false;
+        if(good&&i+kk<U.length&&U[i+kk]<U[i]+c-3)good=false;
+        if(good){ok={k:kk,T:c};break;}}
+      if(!ok){i++;continue;}
+      const {k,T}=ok,s=Math.round(U[i]/60)*60,ms=mStart(s);if(s+T>ms.start+ms.cap+2){i++;continue;}
+      const dl=T/k,d=[30,60,120,240,480].find(x=>x>=dl-3)||480,dn={30:'64',60:'32',120:'16',240:'8',480:'q'}[d];
+      const R={id:'m'+uid(),a:s,b:s+T,k,T,d:dn,tn:Math.max(1,Math.round(T/d)),pos:[]};for(let q=0;q<k;q++){const p=s+Math.round(q*T/k);R.pos.push(p);onMap.set(U[i+q],p);}REG.push(R);
+      i+=k;}}
+  const regAt=t=>REG.find(R=>t>=R.a&&t<R.b);
+  N.forEach(n=>{for(const [u,p] of [[n.on,onMap.get(n.on)],[n.on-1,onMap.get(n.on-1)],[n.on+1,onMap.get(n.on+1)],[n.on-2,onMap.get(n.on-2)],[n.on+2,onMap.get(n.on+2)]])if(p!=null){n.tq=p;break;}});
+  // 2) 拍ごとの格子（2進 / 3連 / 64分）
+  if(!G){const per=new Map();N.forEach(n=>{if(n.tq!=null)return;const h=Math.floor((n.on+20)/H2),r=n.on-h*H2,o=per.get(h)||{eb:0,et:0,e3:0,c:0};o.eb+=Math.abs(r-Math.round(r/60)*60);o.et+=Math.abs(r-Math.round(r/80)*80);o.e3+=Math.abs(r-Math.round(r/30)*30);o.c++;per.set(h,o);});
+    const st=h=>{const o=per.get(h);if(!o)return 'none';if(o.eb<4&&o.et<4)return 'neutral';if(o.e3+6*o.c<o.eb&&o.e3<=o.et)return 'b30';return o.et+6*o.c<o.eb?'tri':'bin';};
+    new Set([...per.keys()].map(h=>h>>1)).forEach(b=>{const a=st(2*b),c=st(2*b+1);if(a==='b30')g30.add(2*b);if(c==='b30')g30.add(2*b+1);
       if((a==='tri'&&(c==='tri'||c==='neutral'))||(c==='tri'&&a==='neutral')){grid.set(2*b,{base:b*B,span:B});grid.set(2*b+1,{base:b*B,span:B});}
       else{if(a==='tri')grid.set(2*b,{base:2*b*H2,span:H2});if(c==='tri')grid.set(2*b+1,{base:(2*b+1)*H2,span:H2});}});}
-  const gAt=t=>G||(grid.get(Math.floor((t+20)/H2))?80:60);
-  const qt=t=>{if(G)return Math.round(t/G)*G;const g=grid.get(Math.floor((t+20)/H2));return g?g.base+Math.round((t-g.base)/80)*80:Math.round(t/60)*60;};
+  const gAt=t=>{if(G)return G;const R=regAt(t);if(R)return Math.round(R.T/R.k);const h=Math.floor((t+20)/H2);return grid.get(h)?80:g30.has(h)?30:60;};
+  const qt=t=>{if(G)return Math.round(t/G)*G;const R=regAt(t);if(R){let b=R.b,bd=Math.abs(t-R.b);for(const p of R.pos)if(Math.abs(t-p)<bd){bd=Math.abs(t-p);b=p;}return b;}
+    const h=Math.floor((t+20)/H2),g=grid.get(h);return g?g.base+Math.round((t-g.base)/80)*80:g30.has(h)?Math.round(t/30)*30:Math.round(t/60)*60;};
   // 量子化・重複除去
-  let notes=N.map(n=>{const on=qt(n.on);return {m:n.m,on,off:Math.max(qt(n.off),on+gAt(n.on))};});
+  let notes=N.map(n=>{const on=n.tq!=null?n.tq:qt(n.on);const o={m:n.m,on,off:Math.max(qt(n.off),on+gAt(n.on)),ron:n.on};if(n.arp)o.arp=1;return o;});
+  const offG=n=>{if(n.ron==null||regAt(n.on))return false;const r=n.ron,g=gAt(r);return Math.abs(r-Math.round(r/g)*g)>=3;};
   const key=new Map();notes.forEach(n=>{const k=n.m+':'+n.on,o=key.get(k);if(!o||n.off>o.off)key.set(k,n);});notes=[...key.values()].sort((a,b)=>a.on-b.on||a.m-b.m);
   // 装飾の復元: 2音の高速交互（トリル）→ 1音+tr、拍頭の短い前打ち → 前打音
   {const byOn=()=>{const mp=new Map();notes.forEach(n=>{if(!mp.has(n.on))mp.set(n.on,[]);mp.get(n.on).push(n);});return mp;};let mp=byOn();const used=new Set(),add=[];
-    for(const a of notes){const d=a.off-a.on;if(used.has(a)||d>80)continue;const run=[a];let cur=a;
+    for(const a of notes){const d=a.off-a.on;if(used.has(a)||d>80||regAt(a.on))continue;const run=[a];let cur=a;
       for(;;){const nx=(mp.get(cur.off)||[]).filter(n=>!used.has(n)&&n.off-n.on===d&&Math.abs(n.m-cur.m)>=1&&Math.abs(n.m-cur.m)<=2&&(run.length<2||n.m===run[run.length-2].m));if(nx.length!==1)break;run.push(nx[0]);cur=nx[0];}
-      if(run.length>=4){run.forEach(n=>used.add(n));add.push({m:Math.min(run[0].m,run[1].m),on:run[0].on,off:cur.off,orn:'tr'});}}
+      // 記譜どおりの細かい音型と区別: 拍の格子から外れた実演奏（装飾の展開）か、短い交互で前後が長い音の場合だけトリル
+      const iv=run.slice(1).map((n,q)=>n.ron-run[q].ron),avg=iv.reduce((x,y)=>x+y,0)/Math.max(1,iv.length),regular=[30,60,80,120].some(g=>Math.abs(avg-g)<=2)&&iv.every(x=>Math.abs(x-avg)<=3);
+      const nextLong=(mp.get(cur.off)||[]).every(n=>n.off-n.on>d*1.5),isTr=(run.some(offG)&&!regular)||(run.length<8&&nextLong);
+      if(run.length>=4&&isTr){run.forEach(n=>used.add(n));add.push({m:Math.min(run[0].m,run[1].m),on:run[0].on,off:cur.off,orn:'tr'});}}
     notes=notes.filter(n=>!used.has(n)).concat(add).sort((a,b)=>a.on-b.on||a.m-b.m);mp=byOn();const gone=new Set();
     for(const g of notes){const d=g.off-g.on;if(d>60||g.orn||gone.has(g)||(mp.get(g.on)||[]).length>1)continue;const nx=(mp.get(g.off)||[]).filter(n=>!gone.has(n));if(!nx.length||Math.min(...nx.map(n=>n.off-n.on))<120)continue;
-      const onGrid=t=>t%120===0;if(onGrid(g.on)===onGrid(g.off))continue;
+      const onGrid=t=>t%120===0;if(onGrid(g.on)===onGrid(g.off)||(!onGrid(g.on)&&!offG(g)))continue;
       if(onGrid(g.on))nx.forEach(n=>{n.on=g.on;});nx[0].gr=(nx[0].gr||[]).concat(g.m);gone.add(g);}
     notes=notes.filter(n=>!gone.has(n)).sort((a,b)=>a.on-b.on||a.m-b.m);}
   const ons=[...new Set(notes.map(n=>n.on))].sort((a,b)=>a-b);
@@ -1153,13 +1323,20 @@ function midiToStaff(si,N,qm){
   // 区切り（発音・消音・3連の拍頭）
   const bd=new Set();notes.forEach(n=>{bd.add(n.on);bd.add(n.off);});
   if(!G)grid.forEach(g=>{bd.add(g.base);bd.add(g.base+g.span);});
+  REG.forEach(R=>{bd.add(R.a);bd.add(R.b);});
+  const tupEv=(R,tpl,L)=>{const b=L*R.k/R.T*BASE[R.d];let x=DEC[0];for(const y of DEC)if(Math.abs(y.t-b)<Math.abs(x.t-b))x=y;return Object.assign(tpl,{id:tpl.id||uid(),d:x.d,dots:x.dots,tup:R.k,tn:R.tn,tg:R.id,tk:L});};
+  const padExact=t0=>{let e=staffEnd(si),g=0;while(e<t0&&g++<64){const R=regAt(e);
+      if(R){S.staves[si].push(tupEv(R,{r:true,n:[]},Math.min(t0,R.b)-e));}
+      else{const nx=REG.filter(R=>R.a>e).reduce((m,R)=>Math.min(m,R.a),Infinity),end=Math.min(t0,nx);padTo(si,end);const e2=staffEnd(si);if(e2<end)S.staves[si].push({id:uid(),r:true,n:[],d:'64',dots:0,tk:end-e2});}
+      e=staffEnd(si);}};
   const T=[...bd].sort((a,b)=>a-b);let act=[],ni=0;
   for(let k=0;k<T.length-1;k++){const t0=T[k],t1=T[k+1];
     while(ni<notes.length&&notes[ni].on<=t0){act.push(notes[ni]);ni++;}
     act=act.filter(n=>n.off>t0);const snd=act.filter(n=>n.on<=t0);if(!snd.length)continue;
-    padTo(si,t0);if(staffEnd(si)!==t0)continue;
+    padExact(t0);if(staffEnd(si)!==t0)continue;
     const mk=(last)=>snd.map(n=>(!last||n.off>t1)?{m:n.m,t:1}:{m:n.m});
-    const st0=snd.filter(n=>n.on===t0),orn=st0.find(n=>n.orn)?.orn,gr=st0.flatMap(n=>n.gr||[]),deco=tp=>{if(orn)tp.orn=orn;if(gr.length)tp.gr=gr;return tp;};
+    const st0=snd.filter(n=>n.on===t0),orn=st0.find(n=>n.orn)?.orn,gr=st0.flatMap(n=>n.gr||[]),deco=tp=>{if(orn)tp.orn=orn;if(gr.length)tp.gr=gr;if(st0.some(n=>n.arp)&&snd.length>1)tp.arp=1;return tp;};
+    const RR=regAt(t0);if(RR){appendEv(si,tupEv(RR,deco({r:false,n:mk(true),tie:false}),t1-t0));continue;}
     const gg=G?null:grid.get(Math.floor(t0/H2)),tri=gg&&(t1-t0)%gg.span!==0;
     if(tri){let L=t1-t0;const ps=[];for(const v of (gg.span===B?[320,160,80]:[160,80]))while(L>=v){ps.push(v);L-=v;}
       ps.forEach((v,i)=>{const tp={r:false,n:mk(i===ps.length-1),d:{320:'q',160:'8',80:'16'}[v],dots:0,tup:3};appendEv(si,i?tp:deco(tp));});}
@@ -1175,6 +1352,677 @@ function exportMidi(){
   const hdr=[0x4D,0x54,0x68,0x64,0,0,0,6,0,1,0,1+tr.length,(Q>>8)&255,Q&255];
   download(new Blob([new Uint8Array([...hdr,...t0,...tr.flat()])],{type:'audio/midi'}),(S.title||'score')+'.mid');
 }
+/* ================= MusicXML ================= */
+/* 初回起動用の組み込みMusicXML（rakanpanera-risuto.mxl） */
+const EMBEDDED_DEFAULT_MXL =
+  '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' +
+  '6fRoE0T5ey8+/MNF3RtN2tjzbLOYDfafdjf8fvXl6qraHW/e6N5Sz9fXfH0LmkZap8/J6DmbpQ/p9MMjbD9mvSl8WCmT/Nf4qvyM' +
+  'yj9U37nIVs/vL1yOS3pX/uFIEi2/UkJsWnyj7VMff6v1ZjlPDpMZJqv1cHC/KsxnsjM7g/wpexntP7zU4I9jGmo+12MRDxprO8TB' +
+  'sVFXYDCHRB7SQUAZJ5mijyl+ToGuHRI9ETShQFmjK/gG542fxCJdlnym0GWRUALvhXkoJ68kGqoud2UkVoQ1RoyV5DOFru3ts8gr' +
+  '1CpTnvIV8Yaei0xBatPhKb8q9agJ1Wx6GAqRV29fJGw/J/2WfDoI9ltkSnDDIYQpjHCkEAqUNTyUA/HGz8gkuiz5TKHLIqEEDrXk' +
+  'oZy8EuPSlF+9u+y5XHTpDsqW/Zt/zm6/e8lWs3zwUKjArm3wbpgWMKfTQi1WST79cnuxfcfxc3ncHetnLjRDRDbRVaFr7AHWQZQm' +
+  'JbZUM0sljTQ8Muur14GrY50S4hN5GKZWIuFqUSv97NmiVlalTq20AT8crl60knk+KufbF6FyhlFOP3vndcBCdYsTV4vq1tI7AaFT' +
+  'LNOg8mHh6lj5hPg6Hg+plUi4WtTKlspFCNWDkz11Kk5cHesUPR21cvdFqJVhtNKsMO0HglbCwUJ1ixNXL+rWdu8AoW667x38bqCi' +
+  'NvbWxoWrWtrmVSiXV1fdV6Gctg1md5LjnrZh3PDM7etKknLByJONXVSz7GXRoIY1i0/qUS1+RfL4mE7WybkVndOnbDW7OI2NWZru' +
+  'W0hsBEvbLCjt29YVpbTNPMdVw06ndlH8tpmsCixM1xhN1utVer85Mv+303nyUPWpR9xIHxfby+Hy/9UXtluMit9X3Wa0+4Xlx1Uf' +
+  '4PPvtFPj3SAimd61M1el77GxmlwypUDEcXUNkVC6RwquptPN/PMru4efFt80+7RrrPGH3Fpn1ZbH37oZCGsAB8uZ+u0xqUVFl8Eo' +
+  'i4ruq43Mgm+PqHSJan/4R6r9QRxB1V6If4/xKpn24PCPtAcHcXizBwA9dvYiBFXHf9oF2oUQdoFZQZqFdybRLOgyCwD9hdHAQkWn' +
+  'or99LTxF99XZyPTgCfCo9lT7sGovxL8zPUh78PYG2gNb9sBXNyfDgBPgUe2p9mHVnmEA7cGeQrQHuuwBQKsrbwmN7ALeDgb/huLi' +
+  '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' +
+  'UtXPSCseMWNSjbNjOzT6MLaDYo6fPY10wDFwxSxY6ztAnlyJgStmsQ4EVxjrQDOrJdaBoA8JISKEIVc0csUshOm7KpFciYErZiEM' +
+  'BFe0hzAut1t3qi43aWrwtijbrCBB8iKwD3LpuhbNbI6GQkG1tD1HJI1Vkq8vPDyz+GczWwtf+tvatfBXTtfCm1nDoNuzT3lIV2ou' +
+  'dedyAFH5yX+52sneIWi0LVgoA4b8bKeWmv44LDU9+1599rqYPKfTjwtsl8tPW2vr3mlyuZ5nm8VssP+0Igj/8eXHdTWWNr9+N4vm' +
+  'xn1Vso0RHc5zP65qqNHjhPaj6wHt6qzz2TlblN0vZj1615Xn9a35fLM6/vFP2tdcjnL6mAgV1ZDsQEmuj6wHmClJQpFQ/XMGZI3s' +
+  'bLtT3njKXpJSeijlKc9LSsmklNmNz9ExoKxFdx7z28zC6+BqbHEYT7TvL5kuOyTxJRIfeA84CSWfUEpWKdhcMKyD9vEFu7gTTkgp' +
+  'RZSyuUiBvAlbMfmRKPaqKv2fsT2t1mqtK+jAWcNqmBqi1APzkBQ8XU/eZL9Zrsrf11/m4hv/m2t2r266l+wOCvkt1qPs/m/Fx2+P' +
+  '5JUfaCw+uWw1bE3FJ5c/fNf1/aWprm98Rl2fFJGZP2uI2qL7yapEZDDPdj7mbrhT7Koxn6xG+fp1nvyaly+Ntv8tWb3/5yOqr6oA' +
+  '9yld2opssEheRvlraaruhq9JflDh8y3HS7aa5YOHImbZPffdMF1P5ul0+GuZ/vf/NnjO8jy7vdi+61y7satpKr7EMivs0OVlz3Im' +
+  'QzY3eIk2NtfZvLB5aKtf8ewg6ZzCpXo/Olmt0+lm/vmV3WNNCzXMPtXaNf6QQZhjocK/b2ogLKYktNXTImmNgSxpTVrvxUdak9ak' +
+  '9QAYWdLaQuqRZMbAs2sX+3XDU55oYgdL5pwG1k81odVvH7ChB1SLe2AbHsDO4zUBSjVA8e5qtf3MQHTDjZPtvNYmJVjdbiHZMlJf' +
+  'lBlMWxMNodXClU2h9lSfQ2IoieRtLA4KFWF6eK5WGaL3mw5yfbhiB5nSVHuTf5/Ms5ezb/L3vLR0j49QV2071dPItM6lYGEMg4v6' +
+  'n3AVE2YHI3KH3KFxIUH2LwZd30fuxMgdOiZyp/5ZaXfIHRPueJty7i0uGguqQpZ6a+NbxudnnqFLfCIT5/lDmf1FM65FTw2HoKQ2' +
+  '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';
+async function zipEntries(buf){
+  const v=new DataView(buf),u8=new Uint8Array(buf);let e=-1;
+  for(let i=u8.length-22;i>=Math.max(0,u8.length-65600);i--)if(v.getUint32(i,true)===0x06054b50){e=i;break;}
+  if(e<0)throw new Error('ZIP（.mxl）の形式が正しくありません');
+  const n=v.getUint16(e+10,true);let p=v.getUint32(e+16,true);const out={};
+  for(let k=0;k<n;k++){if(v.getUint32(p,true)!==0x02014b50)break;const method=v.getUint16(p+10,true),cs=v.getUint32(p+20,true),nl=v.getUint16(p+28,true),xl=v.getUint16(p+30,true),cl=v.getUint16(p+32,true),off=v.getUint32(p+42,true);
+    const name=new TextDecoder().decode(u8.subarray(p+46,p+46+nl));p+=46+nl+xl+cl;const st=off+30+v.getUint16(off+26,true)+v.getUint16(off+28,true);out[name]={method,data:u8.subarray(st,st+cs)};}
+  return out;
+}
+async function zipRead(e){if(e.method===0)return e.data;if(e.method!==8)throw new Error('未対応の圧縮形式です');
+  if(!window.DecompressionStream)throw new Error('このブラウザは .mxl の展開に未対応です。.musicxml 形式で保存して読み込んでください');
+  return new Uint8Array(await new Response(new Blob([e.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());}
+const xmlDecode=u8=>u8[0]===0xFF&&u8[1]===0xFE?new TextDecoder('utf-16le').decode(u8):u8[0]===0xFE&&u8[1]===0xFF?new TextDecoder('utf-16be').decode(u8):new TextDecoder().decode(u8);
+async function musicXmlText(file){
+  const buf=await file.arrayBuffer(),u8=new Uint8Array(buf);
+  if(u8[0]===0x50&&u8[1]===0x4B){const ents=await zipEntries(buf);let root=null;
+    if(ents['META-INF/container.xml']){const m=xmlDecode(await zipRead(ents['META-INF/container.xml'])).match(/full-path="([^"]+)"/);if(m)root=m[1];}
+    if(!root||!ents[root])root=Object.keys(ents).find(k=>!k.startsWith('META-INF')&&/\.(xml|musicxml)$/i.test(k));
+    if(!root)throw new Error('.mxl の中に楽譜データが見つかりません');return xmlDecode(await zipRead(ents[root]));}
+  return xmlDecode(u8);
+}
+const MX_TYPE={breve:'w',whole:'w',half:'h',quarter:'q',eighth:'8','16th':'16','32nd':'32','64th':'64','128th':'64'};
+const MX_ART={staccato:'stacc',staccatissimo:'stiss',spiccato:'stiss',tenuto:'ten',accent:'acc','strong-accent':'marc'};
+const MX_ORN={'trill-mark':'tr',mordent:'mordent','inverted-mordent':'mordent_inverted',turn:'turn','inverted-turn':'turn'};
+const MX_DYN=['ppp','pp','p','mp','mf','f','ff','fff','sfz','fp','sf','sfp','rfz','fz'];
+function importMusicXml(txt,name){
+  const doc=new DOMParser().parseFromString(txt,'application/xml');if(doc.getElementsByTagName('parsererror').length)throw new Error('XMLとして読めませんでした');
+  const root=doc.documentElement;if(root.nodeName==='score-timewise')throw new Error('timewise形式のMusicXMLには未対応です（partwiseで書き出してください）');
+  if(root.nodeName!=='score-partwise')throw new Error('MusicXMLではありません');
+  const kid=(el,n)=>{if(!el)return null;for(const c of el.children)if(c.nodeName===n)return c;return null;},kids=(el,n)=>el?[...el.children].filter(c=>c.nodeName===n):[],tx=(el,n)=>{const c=kid(el,n);return c?c.textContent.trim():null;};
+  const parts=kids(root,'part');if(!parts.length)throw new Error('パートがありません');
+  const staffCount=pt=>Math.max(1,...[...pt.getElementsByTagName('staves')].map(e=>+e.textContent||1));
+  // 使うパート: 2段のパート（ピアノ）を優先。なければ先頭2パートを上段・下段に
+  let use;const piano=parts.find(pt=>staffCount(pt)>=2);
+  if(piano)use=[{pt:piano,map:n=>Math.min(1,n-1)}];else use=parts.slice(0,2).map((pt,i)=>({pt,map:()=>i}));
+  const skipped=parts.length-(piano?1:Math.min(2,parts.length));
+  stopPlayback();hist();const keep=S;S=newScore(keep);S.layout=use.length>1||piano?'grand':'single';S.clefs=['treble','bass'];S.mA={};S.sp=[];
+  const wt=root.getElementsByTagName('work-title')[0],mt=root.getElementsByTagName('movement-title')[0];S.title=(wt&&wt.textContent.trim())||(mt&&mt.textContent.trim())||name;
+  const cr=[...root.getElementsByTagName('creator')].find(c=>c.getAttribute('type')==='composer');S.composer=cr?cr.textContent.trim():'';
+  // 1パス目: 小節ごとの属性（調・拍子・テンポ・反復）と小節の長さ
+  const p0=use[0].pt,M0=kids(p0,'measure'),NM=M0.length,mLen=[],mInfo=[];let div=1,key0=null,mode0=null,time0=null,tempo0=null,clefs0=[null,null];
+  M0.forEach((m,mi)=>{let pos=0,mx=0;const inf={};
+    for(const el of m.children){const nn=el.nodeName;
+      if(nn==='attributes'){const d=tx(el,'divisions');if(d)div=+d;
+        const k=kid(el,'key');if(k&&tx(k,'fifths')!=null){const f=clamp(+tx(k,'fifths'),-7,7);if(key0==null){key0=f;mode0=tx(k,'mode');}else inf.key=f;}
+        const t=kid(el,'time');if(t&&tx(t,'beats')){const b=+String(tx(t,'beats')).split('+').reduce((a,x)=>a+ +x,0),bt=+tx(t,'beat-type'),sym=t.getAttribute('symbol');const tsy=sym==='common'&&b===4&&bt===4?'C':sym==='cut'&&b===2&&bt===2?'C|':'';if(!time0)time0={time:[b,bt],sym:tsy};else inf.time={time:[b,bt],sym:tsy};}
+        for(const c of kids(el,'clef')){const n=+(c.getAttribute('number')||1),sg=tx(c,'sign'),ln=+tx(c,'line');const cl=sg==='F'?'bass':sg==='C'?(ln===4?'tenor':'alto'):'treble';const si=use[0].map(n);if(si<2&&clefs0[si]==null)clefs0[si]=cl;}}
+      else if(nn==='backup'){pos-=+tx(el,'duration')||0;}
+      else if(nn==='forward'){pos+=+tx(el,'duration')||0;mx=Math.max(mx,pos);}
+      else if(nn==='note'){if(kid(el,'chord')||kid(el,'grace'))continue;pos+=+tx(el,'duration')||0;mx=Math.max(mx,pos);}
+      else if(nn==='sound'||nn==='direction'){const snd=nn==='sound'?el:kid(el,'sound');const tp=snd&&snd.getAttribute('tempo');if(tp){const b=Math.round(+tp);if(tempo0==null&&mi===0)tempo0=b;else if(b)inf.bpm=b;}
+        if(nn==='direction'){for(const dt of kids(el,'direction-type')){if(kid(dt,'segno'))inf.rep='SEGNO_LEFT';if(kid(dt,'coda'))inf.rep='CODA_LEFT';const w=tx(dt,'words');
+          if(w){const W2=w.replace(/\s+/g,' ').trim();if(/^D\.?\s?C\.?/i.test(W2))inf.rep=/coda/i.test(W2)?'DC_AL_CODA':/fine/i.test(W2)?'DC_AL_FINE':'DC';else if(/^D\.?\s?S\.?/i.test(W2))inf.rep=/coda/i.test(W2)?'DS_AL_CODA':/fine/i.test(W2)?'DS_AL_FINE':'DS';else if(/^fine$/i.test(W2))inf.rep='FINE';else if(/^to coda/i.test(W2))inf.rep='TO_CODA';
+            else if(kid(el,'sound')?.getAttribute('tempo')||el.getElementsByTagName('metronome').length)inf.ttxt=W2;}
+          const mn=kid(dt,'metronome');if(mn&&tx(mn,'per-minute')&&!(snd&&snd.getAttribute('tempo'))){const b=Math.round(+tx(mn,'per-minute'));if(tempo0==null&&mi===0)tempo0=b;else inf.bpm=b;}}}}
+      else if(nn==='barline'){const loc=el.getAttribute('location')||'right',rp=kid(el,'repeat'),bs=tx(el,'bar-style'),en=kid(el,'ending');
+        if(rp&&rp.getAttribute('direction')==='forward')inf.beg='repeat';if(rp&&rp.getAttribute('direction')==='backward')inf.end='repeat';
+        else if(loc==='right'&&bs==='light-heavy')inf.end=inf.end||'final';else if(loc==='right'&&bs==='light-light')inf.end=inf.end||'double';
+        if(en&&en.getAttribute('type')==='start'){const nb=(en.getAttribute('number')||'').split(/[ ,]/)[0];if(nb==='1'||nb==='2')inf.volta=nb;}}}
+    mLen.push(Math.round(mx*Q/div));mInfo.push({inf,implicit:m.getAttribute('implicit')==='yes'});});
+  if(key0!=null)S.key=key0;if(mode0==='minor')S.mode='minor';if(time0){S.time=time0.time;S.timeSym=time0.sym;}S.tempo=tempo0?clamp(tempo0,30,220):100;
+  if(clefs0[0])S.clefs[0]=clefs0[0];if(clefs0[1])S.clefs[1]=clefs0[1];
+  mInfo.forEach(({inf},mi)=>{const a={};if(inf.key!=null)a.key=inf.key;if(inf.time){a.time=inf.time.time;a.tsym=inf.time.sym;}if(inf.bpm)a.bpm=clamp(inf.bpm,20,300);if(inf.ttxt)a.ttxt=inf.ttxt;if(inf.rep)a.rep=inf.rep;if(inf.beg)a.beg=inf.beg;if(inf.end)a.end=inf.end;if(inf.volta)a.volta=inf.volta;if(Object.keys(a).length)S.mA[mi]=a;});
+  {const g0=measures(0,NM+1);mLen.forEach((L,mi)=>{if(L>0&&g0[mi]&&L!==g0[mi].cap)(S.mA[mi]=S.mA[mi]||{}).len=L;});}
+  const grid=measures(0,NM+1);S.clefCh=[];
+  // 2パス目: 音符（声部ごと。1段に2声部まで。3声部目以降は和音・空き位置へ統合）
+  const clefName=c=>{const sg=tx(c,'sign'),ln=+tx(c,'line');return sg==='F'?'bass':sg==='C'?(ln===4?'tenor':'alto'):'treble';};
+  const home={};use.forEach(({pt},pi)=>{for(const n of pt.getElementsByTagName('note')){const k=pi+':'+(tx(n,'voice')||'1'),st=+(tx(n,'staff')||1);(home[k]=home[k]||{})[st]=(home[k][st]||0)+1;}});
+  const homeOf=(pi,v)=>{const h=home[pi+':'+v];return h?+Object.entries(h).sort((a,b)=>b[1]-a[1])[0][0]:1;};
+  const pushSplit=(li,tpl,L)=>{const ps=decompose(L);let sum=0;const out=ps.map(p=>{sum+=evTicks(p);return {...tpl,id:uid(),n:[],d:p.d,dots:p.dots};});
+    if(!out.length)out.push({...tpl,id:uid(),n:[],d:'64',dots:0,tk:L});else if(L>sum){const l=out[out.length-1];l.tk=evTicks(l)+L-sum;}S.staves[li].push(...out);return out;};
+  const padX=(li,T)=>{let e=staffEnd(li);if(e>T){trimTo(li,T);e=staffEnd(li);}if(T>e)pushSplit(li,{r:true,n:[],hid:1},T-e);};
+  const pickD=(h,tk)=>{if(h.type)return {d:h.type,dots:h.dots};const b=h.tm?tk*h.tm.a/h.tm.n:tk;let best=DEC[0];for(const x of DEC)if(Math.abs(x.t-b)<Math.abs(best.t-b))best=x;return {d:best.d,dots:best.dots};};
+  const startMap=new Map(),spans=[],openSp={};let total=0,tgId=1,dropped=0;
+  use.forEach(({pt,map},pi)=>{const M=kids(pt,'measure');let dv=1;
+    M.forEach((m,mi)=>{if(mi>=NM)return;const g=grid[mi],len=g.cap,base=g.start;
+      const notes=[],dirs=[];let pos=0,last=0;
+      for(const el of m.children){const nn=el.nodeName;
+        if(nn==='attributes'){const d=tx(el,'divisions');if(d)dv=+d;
+          for(const c of kids(el,'clef')){const si=map(+(c.getAttribute('number')||1)),t=Math.round(pos*Q/dv);if(si>1||(mi===0&&t===0))continue;S.clefCh.push({s:si,t:base+t,c:clefName(c)});}}
+        else if(nn==='backup')pos-=+tx(el,'duration')||0;
+        else if(nn==='forward')pos+=+tx(el,'duration')||0;
+        else if(nn==='direction'){const st=+(tx(el,'staff')||1),off=+(tx(kid(el,'offset')?el:null,'offset')||0),t=Math.round((pos+off)*Q/dv);
+          for(const dt of kids(el,'direction-type')){const dy=kid(dt,'dynamics');if(dy&&dy.children[0]){let d=dy.children[0].nodeName;if(d==='sf'||d==='fz'||d==='rfz')d='sfz';if(d==='sfp')d='fp';if(MX_DYN.includes(d))dirs.push({k:'dyn',st,t,v:d});}
+            const wg=kid(dt,'wedge');if(wg){const ty=wg.getAttribute('type');dirs.push({k:'wedge',st,t,ty,num:wg.getAttribute('number')||'1'});}
+            const pd=kid(dt,'pedal');if(pd)dirs.push({k:'ped',st,t,ty:pd.getAttribute('type')});
+            const os=kid(dt,'octave-shift');if(os)dirs.push({k:'oct',st,t,ty:os.getAttribute('type'),num:os.getAttribute('number')||'1'});
+            const w=tx(dt,'words');if(w&&!S.mA[mi]?.ttxt&&!/^(D\.?\s?[CS]\.?|fine|to coda)/i.test(w.trim()))dirs.push({k:'tx',st,t,v:w.trim().slice(0,24)});}}
+        else if(nn==='harmony'){const r=kid(el,'root');if(r){const al=+(tx(r,'root-alter')||0),kd=kid(el,'kind'),kt=kd&&(kd.getAttribute('text')??({major:'',minor:'m',dominant:'7','major-seventh':'maj7','minor-seventh':'m7',diminished:'dim',augmented:'aug','suspended-fourth':'sus4','suspended-second':'sus2','half-diminished':'m7♭5','diminished-seventh':'dim7','major-sixth':'6','minor-sixth':'m6'})[kd.textContent.trim()]??'');
+          const bs=kid(el,'bass');dirs.push({k:'ch',st:+(tx(el,'staff')||1),t:Math.round(pos*Q/dv),v:tx(r,'root-step')+(al>0?'♯':al<0?'♭':'')+(kt||'')+(bs?'/'+tx(bs,'bass-step'):'')});}}
+        else if(nn==='note'){const grace=!!kid(el,'grace'),chord=!!kid(el,'chord'),dur=+tx(el,'duration')||0,on=chord?last:pos;
+          const st=+(tx(el,'staff')||1),si=map(st);const adv=()=>{if(!chord&&!grace){last=pos;pos+=dur;}};if(si>1){adv();continue;}
+          const p=kid(el,'pitch'),rest=!!kid(el,'rest'),hidden=el.getAttribute('print-object')==='no';let midi=null,L=null;
+          if(p){const stp=tx(p,'step');L=LET.indexOf(stp);midi=(+tx(p,'octave')+1)*12+({C:0,D:2,E:4,F:5,G:7,A:9,B:11})[stp]+Math.round(+(tx(p,'alter')||0));}
+          else if(!rest){adv();continue;}
+          if(hidden&&!rest){adv();continue;}
+          const tm=kid(el,'time-modification'),ties=kids(el,'tie').map(t=>t.getAttribute('type')),nt=kid(el,'notations');
+          const n={si,voice:tx(el,'voice')||'1',t:Math.round(on*Q/dv),tk:Math.round(dur*Q/dv),type:MX_TYPE[tx(el,'type')]||null,dots:kids(el,'dot').length,tm:tm?{a:+tx(tm,'actual-notes')||3,n:+tx(tm,'normal-notes')||2}:null,
+            rest,hid:hidden,mrest:rest&&kid(el,'rest').getAttribute('measure')==='yes',m:midi,L,grace,chord,ts:ties.includes('start'),te:ties.includes('stop'),art:[],orn:null,slur:[],fg:''};
+          if(nt){for(const a of kids(nt,'articulations'))for(const c of a.children)if(MX_ART[c.nodeName])n.art.push(MX_ART[c.nodeName]);
+            if(kids(nt,'fermata').length)n.art.push('ferm');for(const o of kids(nt,'ornaments'))for(const c of o.children){if(MX_ORN[c.nodeName])n.orn=MX_ORN[c.nodeName];if(c.nodeName==='tremolo'){n.trem=clamp(+c.textContent||3,1,3);if(/start|stop/.test(c.getAttribute('type')||''))n.trem2=1;}}
+            if(kids(nt,'arpeggiate').length)n.arp=1;for(const sl of kids(nt,'slur'))n.slur.push({ty:sl.getAttribute('type'),num:sl.getAttribute('number')||'1'});
+            for(const te of kids(nt,'technical'))for(const f of kids(te,'fingering'))n.fg+=f.textContent.trim();
+            for(const tr of kids(nt,'tied')){const ty=tr.getAttribute('type');if(ty==='start'&&!n.ts)n.ts=true;if(ty==='stop'&&!n.te)n.te=true;}
+            for(const tp of kids(nt,'tuplet')){const ty=tp.getAttribute('type');if(ty==='start'){n.tst=true;n.th=tp.getAttribute('show-number')==='none';}else if(ty==='stop')n.tsp=true;}}
+          {const bm=kids(el,'beam').find(x=>(x.getAttribute('number')||'1')==='1');if(bm)n.bm={begin:'b',continue:'c',end:'e'}[bm.textContent.trim()]||null;}
+          const ly=kids(el,'lyric').find(l=>(l.getAttribute('number')||'1')==='1');if(ly&&tx(ly,'text'))n.ly=tx(ly,'text')+(['begin','middle'].includes(tx(ly,'syllabic'))?'-':'');
+          notes.push(n);adv();}}
+      for(const si of (piano?[0,1]:[map(1)])){
+        const mine=notes.filter(n=>n.si===si),dm=dirs.filter(d=>map(d.st)===si);
+        mine.forEach((n,i)=>{if(!n.grace||n.m==null)return;const nx=mine.slice(i+1).find(x=>!x.grace&&!x.rest&&x.voice===n.voice);if(nx)(nx.gr=nx.gr||[]).push(n.m);});
+        const byV=new Map();let lg=null;
+        for(const n of mine){if(n.grace)continue;if(n.chord&&lg&&lg.v===n.voice){lg.ns.push(n);continue;}
+          lg={v:n.voice,t:Math.max(0,n.t),tk:n.tk,ns:[n],h:n};if(!byV.has(n.voice))byV.set(n.voice,[]);byV.get(n.voice).push(lg);}
+        const order=[...byV.keys()].sort((a,b)=>((map(homeOf(pi,a))===si?0:1)-(map(homeOf(pi,b))===si?0:1))||(+a- +b)||(a<b?-1:1));
+        const V=[byV.get(order[0])||[],byV.get(order[1])||[]];
+        const ovl=(x,y)=>y.t<x.t+x.tk&&x.t<y.t+y.tk;
+        for(const k of order.slice(2))for(const x of byV.get(k)){if(x.h.rest)continue;let ok=false;
+          for(const arr of [V[1],V[0]]){const y=arr.find(y=>!y.h.rest&&y.t===x.t&&y.tk===x.tk);if(y){y.ns.push(...x.ns);ok=true;break;}}
+          if(!ok)for(const arr of [V[1],V[0]])if(!arr.some(y=>!y.h.hid&&ovl(x,y))){const keep=arr.filter(y=>!ovl(x,y));arr.length=0;arr.push(...keep,x);arr.sort((a,b)=>a.t-b.t);ok=true;break;}
+          if(!ok){const y=[...V[1],...V[0]].find(y=>!y.h.rest&&y.t===x.t);if(y){y.ns.push(...x.ns);ok=true;}}
+          if(!ok)dropped+=x.ns.length;}
+        const deco=(e,ns,t)=>{const a=[...new Set(ns.flatMap(n=>n.art))];if(a.length)e.art=a;const o=ns.find(n=>n.orn);if(o)e.orn=o.orn;const g2=ns.flatMap(n=>n.gr||[]);if(g2.length)e.gr=g2;if(ns.some(n=>n.arp))e.arp=1;
+          const f=ns.map(n=>n.fg).filter(Boolean).join('');if(f)e.fg=f;const l=ns.find(n=>n.ly);if(l)e.ly=l.ly;
+          for(const d of dm){if(d.used)continue;if(d.t<=t){if(d.k==='dyn'){e.dyn=d.v;d.used=1;}else if(d.k==='ch'&&!e.ch){e.ch=d.v;d.used=1;}else if(d.k==='tx'&&!e.tx){e.tx=d.v;d.used=1;}}}};
+        V.forEach((evs,vi)=>{const li=si+vi*2;if(vi===1&&!evs.some(x=>!x.h.hid))return;
+          padX(li,base);let cur=0,G=null;
+          for(const x of evs){const h=x.h;if(x.t<cur){if(!h.rest){const pv=S.staves[li][S.staves[li].length-1];if(pv&&!pv.r&&cur-x.t<x.tk)x.ns.forEach(n=>{if(n.m!=null&&!pv.n.some(y=>y.m===n.m))pv.n.push({m:n.m,sp:n.L});});}continue;}
+            if(x.t>cur)pushSplit(li,{r:true,n:[],hid:1},x.t-cur);
+            const dd=pickD(h,x.tk),e={id:uid(),r:h.rest,n:[],d:dd.d,dots:dd.dots,tk:x.tk};
+            if(!h.rest)e.n=x.ns.filter(n=>n.m!=null).map(n=>{const o={m:n.m};if(n.L>=0)o.sp=n.L;if(n.ts)o.t=1;return o;});
+            if(!e.n.length)e.r=true;if(h.rest&&h.hid)e.hid=1;if(h.mrest&&!h.hid)e.mr=1;if(h.trem&&!e.r)e.trem=h.trem;if(!e.r)e.bm=h.bm||'n';
+            if(h.tm){const a=h.tm.a,nn=h.tm.n;if(G&&(G.a!==a||G.n!==nn||(!G.ex&&G.acc>=G.tg-2)))G=null;
+              if(h.tst||!G)G={id:tgId++,a,n:nn,acc:0,tg:nn*(BASE[dd.d]||60),ex:!!h.tst,th:!!h.th||!!h.trem2};
+              e.tup=a;e.tn=nn;e.tg=G.id;if(G.th)e.th=1;G.acc+=x.tk;if(h.tsp)G=null;}else G=null;
+            deco(e,x.ns,x.t);S.staves[li].push(e);cur=x.t+x.tk;
+            if(!e.r){x.ns.forEach(n=>{n.eid=e.id;});startMap.set(si+':'+(base+x.t),e.id);total+=e.n.length;}}
+        });
+        // 範囲記号（スラー・松葉・ペダル・オクターブ）
+        const real=mine.filter(n=>n.eid);
+        mine.forEach(n=>n.slur.forEach(sl=>{const k='slur'+si+sl.num;if(sl.ty==='start'&&n.eid)openSp[k]={t:'slur',s:si,a:n.eid};else if(sl.ty==='stop'&&openSp[k]&&n.eid){spans.push({...openSp[k],b:n.eid});delete openSp[k];}}));
+        const evAt=t=>{const ns=real.filter(n=>n.t>=t).sort((a,b)=>a.t-b.t);return ns.length?ns[0].eid:null;},evBefore=t=>{const ns=real.filter(n=>n.t<t).sort((a,b)=>b.t-a.t);return ns.length?ns[0].eid:null;};
+        for(const d of dm){if(d.k==='wedge'){const k='w'+si+d.num;if(d.ty==='crescendo'||d.ty==='diminuendo')openSp[k]={t:d.ty==='crescendo'?'cresc':'dim',s:si,a:evAt(d.t),pend:true};else if(d.ty==='stop'&&openSp[k]){const b=evBefore(d.t+1)||evBefore(len);if(openSp[k].a&&b)spans.push({t:openSp[k].t,s:si,a:openSp[k].a,b});delete openSp[k];}}
+          else if(d.k==='ped'){const k='p'+si;if(d.ty==='start')openSp[k]={t:'ped',s:si,a:evAt(d.t)};else if(d.ty==='stop'&&openSp[k]){const b=evBefore(d.t+1);if(openSp[k].a&&b)spans.push({t:'ped',s:si,a:openSp[k].a,b});delete openSp[k];}}
+          else if(d.k==='oct'){const k='o'+si+d.num;if(d.ty==='down'||d.ty==='up')openSp[k]={t:d.ty==='down'?'8va':'8vb',s:si,a:evAt(d.t),pend:true};else if(d.ty==='stop'&&openSp[k]){const b=evBefore(d.t)||evBefore(d.t+1);if(openSp[k].a&&b)spans.push({t:openSp[k].t,s:si,a:openSp[k].a,b});delete openSp[k];}}}
+        for(const k in openSp)if(openSp[k].pend&&!openSp[k].a){openSp[k].a=evAt(0);}
+      }});});
+  const end=grid[NM-1]?grid[NM-1].start+grid[NM-1].cap:maxEnd();for(const li of LISTS()){if(li<2||staffEnd(li)>end)padX(li,end);}
+  const cc=new Map();S.clefCh.sort((a,b)=>a.t-b.t).forEach(x=>cc.set(x.s+':'+x.t,x));S.clefCh=[...cc.values()];
+  S.sp=spans.filter(x=>x.a&&x.b&&x.a!==x.b||x.t==='slur'&&x.a&&x.b);
+  sel=null;lastGroup=null;syncSettings();changed();$('#stage').scrollTop=0;
+  toast(`MusicXMLを読み込みました · ${NM}小節・${total}音`+(skipped>0?`（他${skipped}パートは省略）`:''),3600);
+}
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name.replace(/[\\/:*?"<>|]/g,'_');document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),2000);}
 function saveJson(){download(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}),(S.title||'score')+'.json');toast('譜面を保存しました');}
 function loadScore(d){
@@ -1182,7 +2030,7 @@ function loadScore(d){
     d.notes.forEach(x=>{const at=Math.round((+x.at||0)*Q);if(!by.has(at))by.set(at,{at,dur:Math.round((+x.duration||1)*Q),ms:[],rest:x.type==='rest'});if(x.type!=='rest')by.get(at).ms.push(+x.midi);});
     S=n;[...by.values()].sort((a,b)=>a.at-b.at).forEach(g=>{padTo(0,g.at);if(staffEnd(0)>g.at)return;appendEv(0,g.ms.length?{r:false,n:g.ms.map(m=>({m}))}:{r:true,n:[]},g.dur);});S.layout='single';return;}
   if(!Array.isArray(d.staves))throw new Error('形式が違います');
-  const n=Object.assign(newScore(),d);n.staves=[d.staves[0]||[],d.staves[1]||[]];n.sp=d.sp||[];n.mA=d.mA||{};n.clefs=d.clefs||['treble','bass'];S=n;
+  const n=Object.assign(newScore(),d);n.staves=[0,1,2,3].map(i=>d.staves[i]||[]);n.clefCh=d.clefCh||[];n.sp=d.sp||[];n.mA=d.mA||{};n.clefs=d.clefs||['treble','bass'];S=n;
 }
 
 /* ================= PDF楽譜（OMR） ================= */
@@ -1238,8 +2086,9 @@ function beamCount(b,W,H,st,s){
 }
 async function pdfGlyphs(pg,vp,lib){
   // 演算子リストから文字単位の正確な位置を取得（テキスト結合の影響を受けない）
-  const ol=await pg.getOperatorList(),O=lib.OPS,T=lib.Util.transform,out=[],st=[];
-  let g={ctm:[1,0,0,1,0,0],fs:1,cs:0,ws:0,hs:1,lead:0,rise:0},tm=[1,0,0,1,0,0],tlm=[1,0,0,1,0,0];
+  const ol=await pg.getOperatorList(),O=lib.OPS,T=lib.Util.transform,out=[],st=[],dashes=[];out.dashes=dashes;
+  let g={ctm:[1,0,0,1,0,0],fs:1,cs:0,ws:0,hs:1,lead:0,rise:0,dash:null},tm=[1,0,0,1,0,0],tlm=[1,0,0,1,0,0];
+  const dev=(x,y)=>lib.Util.applyTransform(lib.Util.applyTransform([x,y],g.ctm),vp.transform);
   const move=(tx,ty)=>{tlm=T(tlm,[1,0,0,1,tx,ty]);tm=tlm.slice();};
   const show=arr=>{const str=arr.filter(x=>x&&typeof x==='object').map(x=>x.unicode||'').join('').trim();for(const x of arr){
     if(typeof x==='number'){tm=T(tm,[1,0,0,1,-x/1000*g.fs*g.hs,0]);continue;}if(!x)continue;
@@ -1265,6 +2114,10 @@ async function pdfGlyphs(pg,vp,lib){
       case O.showText:case O.showSpacedText:show(a[0]||[]);break;
       case O.nextLineShowText:move(0,-g.lead);show(a[0]||[]);break;
       case O.nextLineSetSpacingShowText:g.ws=a[0];g.cs=a[1];move(0,-g.lead);show(a[2]||[]);break;
+      case O.setDash:g.dash=(a[0]&&a[0].length)?a[0]:null;break;
+      case O.constructPath:if(g.dash&&Array.isArray(a[0])){const ops=a[0],cs=a[1]||[];let j=0,cx=0,cy=0;
+        for(const op of ops){if(op===O.moveTo){cx=cs[j++];cy=cs[j++];}else if(op===O.lineTo){const x=cs[j++],y=cs[j++],p=dev(cx,cy),q=dev(x,y);dashes.push({x1:Math.min(p[0],q[0]),x2:Math.max(p[0],q[0]),y1:p[1],y2:q[1]});cx=x;cy=y;}
+          else if(op===O.curveTo)j+=6;else if(op===O.curveTo2||op===O.curveTo3||op===O.rectangle)j+=4;}}break;
     }}
   return out;
 }
@@ -1452,7 +2305,10 @@ function assignStems(nb,W,H,st,headsAll,flags,vec){
       if(heads.some(h=>xOK(h,v)&&!att.includes(h)&&Math.abs(h.y-end)<s*1.1))continue;
       const R={v,up,dir,end,att};recs.push(R);
       // 符頭の正しい側（上向きは右、下向きは左）に符幹があるほど良い
-      att.forEach(h=>{const side=up?(v.x>h.x?0:s*.25):(v.x<h.x?0:s*.25),c=Math.abs(Math.abs(h.x-v.x)-s*.55)+side;if(!h._bc||c<h._bc){h._bc=c;h._br=R;}});}
+      att.forEach(h=>{const side=up?(v.x>h.x?0:s*.25):(v.x<h.x?0:s*.25),c=Math.abs(Math.abs(h.x-v.x)-s*.55)+side;(h._cs=h._cs||[]).push({R,c});if(!h._bc||c<h._bc){h._bc=c;h._br=R;}});}
+    // 同じ位置に重なった符頭（2声部の共有音）は、上向きと下向きの符幹に1つずつ割り当てる
+    {const hs=heads.filter(h=>h._br);for(let i=0;i<hs.length;i++)for(let j=i+1;j<hs.length;j++){const a=hs[i],b2=hs[j];if(Math.abs(a.x-b2.x)>s*.2||Math.abs(a.y-b2.y)>s*.2||a._br!==b2._br)continue;
+      const alt=(b2._cs||[]).filter(o=>o.R.up!==a._br.up).sort((p,q)=>p.c-q.c)[0];if(alt)b2._br=alt.R;}}
     for(const R of recs){const {v,up,dir,end}=R,att=R.att.filter(h=>h._br===R);if(!att.length)continue;
       const top=Math.min(...att.map(h=>h.y)),bot=Math.max(...att.map(h=>h.y)),len=up?top-end:end-bot;let n=0;
       const fl=(flags||[]).filter(f=>f.x>v.x-s*.4&&f.x<v.x+s*1.2&&Math.abs(f.y-end)<s*1.6);
@@ -1460,8 +2316,8 @@ function assignStems(nb,W,H,st,headsAll,flags,vec){
       else for(const sd of [-1,1]){const cs=[];for(const off of [.3,.6]){const x=Math.round(v.x+sd*off*s);if(x<0||x>=W)continue;let c=0,run=0,first=null;const lim=Math.min(s*2.6,len-s*.75);
           for(let k=-Math.round(s*.25);k<=lim;k++){const y=Math.round(end+dir*k);if(y<0||y>=H)break;if(nb[y*W+x]){if(first===null)first=k;run++;}else{if(run>=s*(vec?.3:.2)&&run<=s*1.4)c++;run=0;}}if(run>=s*(vec?.3:.2)&&run<=s*1.4)c++;if(first===null||first>s*(vec?.6:1.05))c=0;if(c)cs.push(c);}
         if(cs.length)n=Math.max(n,Math.min(...cs));}
-      n=Math.min(3,n);const sid=Math.round(v.x)*10000+Math.round(v.y1);att.forEach(h=>{h.sid=sid;if(h.k==='q'&&(!h.vd||h.vd==='q'))h.vd=['q','8','16','32'][n];});}
-    heads.forEach(h=>{delete h._bc;delete h._br;});
+      n=Math.min(4,n);const sid=Math.round(v.x)*10000+Math.round(v.y1);att.forEach(h=>{h.sid=sid;h.up=up;if(h.k==='q'&&(!h.vd||h.vd==='q'))h.vd=['q','8','16','32','64'][n];});}
+    heads.forEach(h=>{delete h._bc;delete h._br;delete h._cs;});
     // 2音間トレモロ: 2分音符どうしの間に太い斜線が2本以上 → 各音は半分の長さ
     {const hh=headsAll.filter(h=>h.k==='h').sort((p,q)=>p.x-q.x),cols=[];hh.forEach(h=>{const c=cols[cols.length-1];if(c&&h.x-c.x<s*.8)c.hs.push(h);else cols.push({x:h.x,hs:[h]});});
       for(let i=0;i+1<cols.length;i++){const A=cols[i],B=cols[i+1];if(B.x-A.x>s*8||B.x-A.x<s*2)continue;if(headsAll.some(h=>h.x>A.x+s*.8&&h.x<B.x-s*.8))continue;
@@ -1507,7 +2363,9 @@ async function omrPage(no,o){
       if(g.y>st.lines[4]+st.s*.9&&staves[si+1]&&g.y<staves[si+1].lines[0])o=si+1;else if(g.y<st.lines[0]-st.s*.9&&staves[si-1]&&g.y>staves[si-1].lines[4])o=si-1;if(o<0)return si;
       const so=staves[o],mine=g.y>st.lines[4]?ledgerAt(x,st.lines[4]+st.s,st.s):ledgerAt(x,st.lines[0]-st.s,st.s),other=o>si?(g.y>so.lines[0]-so.s*.9?false:ledgerAt(x,so.lines[0]-so.s,so.s)):(g.y<so.lines[4]+so.s*.9?false:ledgerAt(x,so.lines[4]+so.s,so.s));
       return (!mine&&other)?o:si;};
-    for(const g of gl){let si=stOf(g.y);if(si<0)continue;if(g.c>=0xE0A0&&g.c<=0xE0A9)si=headStaff(g,si);const st=staves[si],c=g.c;
+    for(const g of gl){let si=stOf(g.y);
+      if(g.c>=0xE510&&g.c<=0xE519){const below=staves.findIndex(st=>st.lines[0]>g.y);if(below>=0&&staves[below].lines[0]-g.y<staves[below].s*12&&si<0)si=below;}
+      if(si<0)continue;if(g.c>=0xE0A0&&g.c<=0xE0A9)si=headStaff(g,si);const st=staves[si],c=g.c;
       if(c>=0xE0A0&&c<=0xE0A9&&medSz&&g.sz&&g.sz<medSz*.8)st.graces.push({x:g.x+.4*st.s,y:g.y});
       else if(c>=0xE560&&c<=0xE563)st.graces.push({x:g.x+.4*st.s,y:g.y});
       else if(ORN[c])st.orns.push({x:g.x+.5*st.s,o:ORN[c]});
@@ -1516,21 +2374,35 @@ async function omrPage(no,o){
       else if(c>=0xE0A0&&c<=0xE0A9)st.heads.push({x:g.x+.59*st.s,y:g.y,k:c===0xE0A0||c===0xE0A2?'w':c===0xE0A3?'h':'q'});
       else if(c===0xE050||c===0xE052||c===0xE053||c===0xE062||c===0xE05C||c===0xE07A||c===0xE07C){const t=(c===0xE062||c===0xE07C)?'bass':c===0xE05C?(Math.abs(g.y-st.lines[1])<st.s*.6?'tenor':'alto'):c===0xE052?'treble8':'treble';
         if(g.x<st.x0+st.s*3){if(!st.clef||g.x<st.clef.x)st.clef={x:g.x,t};}else(st.clefCh=st.clefCh||[]).push({x:g.x,t});}
-      else if(c>=0xE260&&c<=0xE264)st.acc.push({x:g.x,y:g.y,a:{0xE260:-1,0xE261:0,0xE262:1,0xE263:2,0xE264:-2}[c]});
+      else if(c>=0xE260&&c<=0xE268&&c!==0xE265&&c!==0xE266)st.acc.push({x:g.x,y:g.y,a:{0xE260:-1,0xE261:0,0xE262:1,0xE263:2,0xE264:-2,0xE267:-1,0xE268:1}[c]});
+      else if(c>=0xE510&&c<=0xE519)(st.otv=st.otv||[]).push({x:g.x,y:g.y,c});
+      else if(c===0xEAA9||c===0xEAAA)(st.arps=st.arps||[]).push({x:g.x,y:g.y});
       else if(c>=0xE4E3&&c<=0xE4E8)st.rests.push({x:g.x+.5*st.s,y:g.y,d:['w','h','q','8','16','32'][c-0xE4E3]});
       else if(c>=0xE240&&c<=0xE245)st.flags.push({x:g.x,y:g.y,n:[1,1,2,2,3,3][c-0xE240]});
       else if(c===0xE1E7)st.dots.push({x:g.x,y:g.y});
       else if(c>=0xE880&&c<=0xE889)(st.tups=st.tups||[]).push({x:g.x+.3*st.s,y:g.y,n:c-0xE880});
       else if(c===0x33){if(g.y>st.lines[0]-st.s*4.5&&g.y<st.lines[4]+st.s*5)(st.tups=st.tups||[]).push({x:g.x+.25*st.s,y:g.y,n:3});}
       else if(c>=0xE080&&c<=0xE08B)(st.tsg=st.tsg||[]).push({x:g.x,y:g.y,c});}
+    staves.forEach(st=>{if(st.clefCh)st.clefCh.sort((p,q)=>p.x-q.x);});
     vecStems(b,W,H,staves,gl.filter(g=>g.c>=0xE240&&g.c<=0xE24F).map(g=>({x:g.x,y:g.y,n:[1,1,2,2,3,3,4,4,5,5][g.c-0xE240]||1})));
+    // オッターヴァ: 「8」の右に続く破線の終わりまでを1オクターブずらす
+    staves.forEach(st=>{st.ott=[];const s=st.s;for(const o of st.otv||[]){const above=o.y<st.lines[2];let sh=(o.c===0xE514||o.c===0xE515)?24:o.c>=0xE516?-24:(o.c===0xE512||o.c===0xE513)?-12:12;if(o.c===0xE510||o.c===0xE511||o.c===0xE514)sh=above?Math.abs(sh):-Math.abs(sh);
+      let by=null,bf=0;for(let y=Math.round(o.y-s*1.8);y<=Math.round(o.y+s*.5);y++){if(y<1||y>=H-1)continue;let d=0,n=0;for(let x=Math.round(o.x+s*1.4);x<Math.min(W,Math.round(o.x+s*6));x++){n++;if(b[y*W+x])d++;}if(n&&d/n>bf){bf=d/n;by=y;}}
+      let x1=o.x+s*1.5;const dl=(gl.dashes||[]).filter(d=>Math.abs(d.y1-d.y2)<s*.3&&d.x1>o.x-s*.5&&d.x1<o.x+s*4&&Math.abs(d.y1-o.y)<s*2.5);
+      if(dl.length){x1=Math.max(...dl.map(d=>d.x2));}else if(by!=null&&bf>.2){let x=Math.round(o.x+s*1.4),last=x;while(x<W-1&&x-last<s*1.6){if(b[by*W+x]||b[(by-1)*W+x]||b[(by+1)*W+x])last=x;x++;}x1=last;}
+      st.ott.push({x0:o.x,x1,sh});}});
   }else rasterOMR(b,W,H,staves,I,stOf,o,marks);
   // 譜表の組（大譜表判定）
   const sys=[];
   if(o.struct==='single')staves.forEach((st,i)=>sys.push([i]));
   else{const gaps=staves.slice(1).map((st,i)=>(st.lines[0]-staves[i].lines[4])/st.s),mn=Math.min(...gaps),mx=Math.max(...gaps),thr=mx>mn*1.3?(mn+mx)/2:(o.struct==='grand'?1e9:-1);
     for(let i=0;i<staves.length;i++){const st=staves[i],nx=staves[i+1];
-      if(nx&&(gaps[i]<thr||(o.struct!=='single'&&st.clef?.t==='treble'&&nx.clef?.t==='bass'&&gaps[i]<mn*1.25))){sys.push([i,i+1]);i++;}else sys.push([i]);}}
+      // 左端の縦線（システム線）が2段をつないでいれば同じ大譜表
+      const joined=nx&&o.struct!=='single'&&(()=>{const y0=st.lines[4]+st.s,y1=nx.lines[0]-nx.s;if(y1<=y0)return true;for(let x=Math.round(Math.min(st.x0,nx.x0)-st.s*.6);x<=Math.round(Math.max(st.x0,nx.x0)+st.s*.4);x++)if(boxR(I,W,H,x+.5,(y0+y1)/2,1,(y1-y0)/2)>.92)return true;return false;})();
+      if(nx&&(joined||gaps[i]<thr||(o.struct!=='single'&&st.clef?.t==='treble'&&nx.clef?.t==='bass'&&gaps[i]<mn*1.25))){sys.push([i,i+1]);i++;}else sys.push([i]);}}
+  if(vec)for(const ids of sys){if(ids.length!==2)continue;const A=staves[ids[0]],B=staves[ids[1]],s=A.s,yc=(A.lines[0]+B.lines[4])/2,hh=(B.lines[4]-A.lines[0])/2,bars=[];
+    for(let x=Math.round(Math.max(A.x0,B.x0)+s*2);x<=Math.min(A.x1,B.x1)+1;x++){if(boxR(I,W,H,x+.5,yc,.5,hh-1)<.97)continue;const l=bars[bars.length-1];if(l!=null&&x-l<s*.8)continue;bars.push(x);}
+    if(bars.length){A.bars=bars;B.bars=bars.slice();}}
   let keyF=null,timeF=null;
   const systems=sys.map(ids=>({parts:ids.map((sti,pi)=>{
     const st=staves[sti],s=st.s,clef=st.clef?.t||(ids.length===2?(pi===0?'treble':'bass'):(o.clefSingle||'treble')),si=ids.length===2?pi:(clef==='bass'&&nStavesFor(o)>1?1:0),base=clefBaseDi(clef);
@@ -1540,7 +2412,7 @@ async function omrPage(no,o){
       if(st.tsg&&!timeF){const mid=st.lines[2],up=st.tsg.filter(t=>t.y<mid).sort((a,c)=>a.x-c.x),dn=st.tsg.filter(t=>t.y>=mid).sort((a,c)=>a.x-c.x);
         if(st.tsg.some(t=>t.c===0xE08A))timeF='C';else if(st.tsg.some(t=>t.c===0xE08B))timeF='C|';else if(up.length&&dn.length)timeF=up.map(t=>t.c-0xE080).join('')+'/'+dn.map(t=>t.c-0xE080).join('');}
       if(!st.bars.length)for(let x=Math.round(st.x0+s*2);x<st.x1;x++){if(boxR(I,W,H,x+.5,(st.lines[0]+st.lines[4])/2,.5,s*2)<.95)continue;if(st.heads.some(h=>Math.abs(h.x-x)<s*1.4))continue;const l=st.bars[st.bars.length-1];if(l!=null&&x-l<s*.8)continue;st.bars.push(x);}}
-    const items=[];
+    const items=[],ott=x=>{for(const o of st.ott||[])if(x>=o.x0-s*.3&&x<=o.x1+s*.3)return o.sh;return 0;};
     st.heads.forEach(h=>{let d=h.k,dots=0;const step=Math.round((st.lines[4]-h.y)/(s/2));const cc=(st.clefCh||[]).filter(c=>c.x<h.x).pop();h.di=(cc?clefBaseDi(cc.t):base)+step;h.y=st.lines[4]-step*s/2;
       if(h.vd)d=h.vd;
       else if(vec){}
@@ -1549,50 +2421,53 @@ async function omrPage(no,o){
         else if(d==='q'){let n=0;const fl=st.flags.filter(f=>f.x>h.x-s*.9&&f.x<h.x+s*1.6&&Math.abs(f.y-h.y)<s*4.5);if(fl.length)n=Math.max(...fl.map(f=>f.n));else if(sm)n=beamCount(b,W,H,sm,s);d=['q','8','16','32'][n];}}
       const dd=h.final?(h.dots||0):vec?st.dots.filter(t=>t.x>h.x+s*.5&&t.x<h.x+s*2.4&&Math.abs(t.y-h.y)<s*.75).length:(boxR(I,W,H,h.x+s*1.25,h.y-(step%2===0?s*.5:0),s*.14,s*.14)>.7&&boxR(I,W,H,h.x+s*1.25,h.y-(step%2===0?s*.5:0),s*.45,s*.45)<.35?1:0);
       dots=Math.min(2,dd);const ac=h.final?(h.acc!=null?{a:h.acc}:null):st.acc.filter(a=>a.x<h.x-s*.4&&a.x>h.x-s*3.6&&Math.abs(a.y-h.y)<s*.6).sort((a,c)=>c.x-a.x)[0];
-      items.push({x:h.x,k:'n',di:h.di,d,dots,acc:ac?ac.a:null,y:h.y,tie:!!h.tie,sid:h.sid});marks.push({x:h.x,y:h.y,r:s*.75,c:vec?'#1c7ed6':'#e8590c'});});
+      items.push({x:h.x,k:'n',di:h.di,d,dots,acc:ac?ac.a:null,y:h.y,tie:!!h.tie,sid:h.sid,up:h.up});marks.push({x:h.x,y:h.y,r:s*.75,c:vec?'#1c7ed6':'#e8590c'});});
     {const hI=items.filter(it=>it.k==='n'),near=(x,md,right)=>{let b0=null,bd=1e9;for(const it of hI){const dx=it.x-x;if(right&&dx<=0)continue;const d=Math.abs(dx);if(d<bd&&d<md){bd=d;b0=it;}}return b0;};
-      (st.graces||[]).forEach(g=>{const it=near(g.x,s*3.5,true);if(!it)return;const step=Math.round((st.lines[4]-g.y)/(s/2)),cc=(st.clefCh||[]).filter(c=>c.x<g.x).pop(),di=(cc?clefBaseDi(cc.t):base)+step,Lg=((di%7)+7)%7;(it.gr=it.gr||[]).push((Math.floor(di/7)+1)*12+NAT[Lg]+keyAlts(key)[Lg]);});
+      (st.graces||[]).forEach(g=>{const it=near(g.x,s*3.5,true);if(!it)return;const step=Math.round((st.lines[4]-g.y)/(s/2)),cc=(st.clefCh||[]).filter(c=>c.x<g.x).pop(),di=(cc?clefBaseDi(cc.t):base)+step,Lg=((di%7)+7)%7;(it.gr=it.gr||[]).push((Math.floor(di/7)+1)*12+NAT[Lg]+keyAlts(key)[Lg]+ott(g.x));});
       (st.orns||[]).forEach(o=>{const it=near(o.x,s*1.6);if(it)it.orn=o.o;});
+      (st.arps||[]).forEach(a=>{const it=near(a.x,s*2.5,true);if(it)it.arp=1;});
       (st.arts||[]).forEach(a=>{const it=near(a.x,s*1.3);if(it){it.art=it.art||[];if(!it.art.includes(a.a))it.art.push(a.a);}});
       const ds=(st.dyns||[]).sort((a,c)=>a.x-c.x),dg=[];ds.forEach(d=>{const g=dg[dg.length-1];if(g&&d.x-g.x1<s*1.6){g.t+=d.ch;g.x1=d.x;}else dg.push({t:d.ch,x:d.x,x1:d.x});});
       dg.forEach(g=>{if(!DYNV[g.t])return;const it=near(g.x+s*.6,s*2.5);if(it)it.dyn=g.t;});}
-    st.rests.forEach(r=>{const dd=r.final?(r.dots||0):st.dots.filter(t=>t.x>r.x&&t.x<r.x+s*2.2).length;items.push({x:r.x,k:'r',d:r.d,dots:Math.min(2,dd)});marks.push({x:r.x,y:st.lines[2],r:s*.6,c:'#2b8a3e'});});
+    st.rests.forEach(r=>{const dd=r.final?(r.dots||0):st.dots.filter(t=>t.x>r.x&&t.x<r.x+s*2.2).length;items.push({x:r.x,k:'r',d:r.d,dots:Math.min(2,dd),y:r.y});marks.push({x:r.x,y:st.lines[2],r:s*.6,c:'#2b8a3e'});});
     {const rs=items.filter(it=>it.k==='r'),drop=new Set(),rt=it=>BASE[it.d]*(it.dots?1.5:1);rs.forEach(a=>rs.forEach(b2=>{if(a!==b2&&!drop.has(b2)&&Math.abs(a.x-b2.x)<s*.9&&(rt(a)>rt(b2)||(rt(a)===rt(b2)&&a.x>b2.x)))drop.add(a);}));
       for(let i=items.length-1;i>=0;i--)if(drop.has(items[i]))items.splice(i,1);}
     st.bars.forEach(x=>items.push({x,k:'b'}));
+    (st.clefCh||[]).forEach(c=>items.push({x:c.x,k:'c',t:c.t}));
     items.sort((a,c)=>a.x-c.x);
     // 和音の列にまとめ、小節内臨時記号を適用
     const cols=[];let mem={};const ka=keyAlts(key);
     for(const it of items){
       if(it.k==='b'){cols.push({k:'b'});mem={};continue;}
-      if(it.k==='r'){cols.push({k:'r',x:it.x,d:it.d,dots:it.dots});continue;}
+      if(it.k==='c'){cols.push({k:'c',t:it.t,x:it.x});continue;}
+      if(it.k==='r'){cols.push({k:'r',x:it.x,d:it.d,dots:it.dots,y:it.y});continue;}
       const L=((it.di%7)+7)%7,oct=Math.floor(it.di/7);let a=it.acc;if(a!=null)mem[it.di]=a;else a=mem[it.di]??ka[L];
-      const midi=(oct+1)*12+NAT[L]+a;
+      const sh=ott(it.x),midi=(oct+1)*12+NAT[L]+a+sh;
       let col=cols[cols.length-1];
       if(it.sid!=null){const sc=cols.slice(-3).find(c=>c.k==='n'&&c.sids&&c.sids.includes(it.sid));if(sc)col=sc;}
       const diffStem=it.sid!=null&&col&&col.sids&&col.sids.length&&!col.sids.includes(it.sid);
       if(!(col&&col.k==='n'&&((it.sid!=null&&col.sids&&col.sids.includes(it.sid))||it.x-col.x<s*(diffStem?.3:.55)||(!diffStem&&it.x-col.x<s*1.4&&col.ys.some(y=>Math.abs(y-it.y)<s*.6)))))cols.push(col={k:'n',x:it.x,ms:[],ys:[],ds:[],sids:[]});
       if(it.sid!=null&&!col.sids.includes(it.sid))col.sids.push(it.sid);
-      col.ms.push(midi);col.ys.push(it.y);col.ds.push(it);if(it.gr)col.gr=(col.gr||[]).concat(it.gr);if(it.orn)col.orn=it.orn;if(it.art)col.art=[...new Set((col.art||[]).concat(it.art))];if(it.dyn)col.dyn=it.dyn;if(it.tie)(col.ties=col.ties||[]).push(midi);
+      col.ms.push(midi);col.ys.push(it.y);col.ds.push(it);if(sh)col.ott=sh;if(it.arp)col.arp=1;if(it.gr)col.gr=(col.gr||[]).concat(it.gr);if(it.orn)col.orn=it.orn;if(it.art)col.art=[...new Set((col.art||[]).concat(it.art))];if(it.dyn)col.dyn=it.dyn;if(it.tie)(col.ties=col.ties||[]).push(midi);
     }
     cols.forEach(c=>{if(c.k!=='n')return;const best=c.ds.slice().sort((p,q)=>BASE[p.d]-BASE[q.d])[0];c.d=best.d;c.dots=best.dots;});
     // 別声部の休符（音符と同じ位置）・音符のある小節の全休符は時間を進めない
-    {const nxs=cols.filter(c=>c.k==='n').map(c=>c.x);for(let i=cols.length-1;i>=0;i--){const c=cols[i];if(c.k==='r'&&c.d!=='w'&&nxs.some(x=>Math.abs(x-c.x)<s*.9))cols.splice(i,1);}
+    {const nxs=cols.filter(c=>c.k==='n').map(c=>c.x);for(let i=cols.length-1;i>=0;i--){const c=cols[i];if(c.k==='r'&&c.d!=='w'&&nxs.some(x=>Math.abs(x-c.x)<s*.9))c.ov=1;}
       let a=0;for(let i=0;i<=cols.length;i++){if(i===cols.length||cols[i].k==='b'){const seg=cols.slice(a,i);if(seg.some(c=>c.k==='n'))for(let j=i-1;j>=a;j--)if(cols[j].k==='r'&&cols[j].d==='w')cols.splice(j,1),i--;a=i+1;}}}
     // 3連符: 数字「3」に最も近い連続3つ
     (st.tups||[]).forEach(t=>{if(t.n!=null&&t.n!==3)return;let best=null;
       for(let a=0;a+2<cols.length;a++){const w=[cols[a],cols[a+1],cols[a+2]];if(w.some(c=>c.k==='b'||c.tup)||w[0].k!=='n'&&w[1].k!=='n')continue;const ds=w.map(c=>c.d);if(ds.some(d=>d!==ds[0])&&!(ds[0]==='q'&&ds[1]==='8')||w.some(c=>c.dots))continue;if(w[2].x-w[0].x>s*7)continue;const mx=(w[0].x+w[2].x)/2,d=Math.abs(mx-t.x);if(d<s*1.1&&Math.abs(w[1].x-t.x)<s*.9&&(!best||d<best.d))best={w,d};}
       if(best)best.w.forEach(c=>c.tup=3);});
-    return {si,cols,s};
+    return {si,cols,s,clef,mid:st.lines[2]};
   })}));
   return {systems,W,marks,key:keyF,time:timeF,vec,count:marks.length,cv:o.debug?cv:null,dbg:o.debug?staves:null,dbgOut:o.dbgOut,gl:o.debug?gl:null};
 }
 function trimTo(si,T){const arr=S.staves[si];let t=staffEnd(si);
-  while(arr.length&&t>T){const e=arr[arr.length-1],d=evTicks(e),st=t-d;if(st>=T){arr.pop();t=st;continue;}arr.pop();const ne={...e,id:uid(),tie:false};delete ne.tup;appendEv(si,ne,T-st);break;}}
+  while(arr.length&&t>T){const e=arr[arr.length-1],d=evTicks(e),st=t-d;if(st>=T){arr.pop();t=st;continue;}arr.pop();const ne={...e,id:uid(),tie:false};delete ne.tup;delete ne.tk;delete ne.tn;delete ne.tg;delete ne.th;appendEv(si,ne,T-st);break;}}
 function omrInferCap(res){
   const cnt={};const tk=c=>evTicks({d:c.d,dots:c.dots});
   for(const r of res)for(const sy of r.systems)for(const p of sy.parts){let sum=0,ok=true,started=false;
-    for(const c of p.cols){if(c.k==='b'){if(started&&ok&&sum>0)cnt[sum]=(cnt[sum]||0)+1;sum=0;ok=true;started=true;continue;}if(c.k==='r'&&c.d==='w'){ok=false;continue;}sum+=tk(c);}}
+    for(const c of p.cols){if(c.k==='b'){if(started&&ok&&sum>0)cnt[sum]=(cnt[sum]||0)+1;sum=0;ok=true;started=true;continue;}if(c.k==='r'&&c.d==='w'){ok=false;continue;}if(c.k==='c'||c.ov)continue;sum+=tk(c);}}
   const best=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];if(!best)return null;const cap=+best[0];
   return ({1920:[4,4],1440:[3,4],960:[2,4],2400:[5,4],2880:[6,4],720:[3,8],1680:[7,8],2160:[9,8]})[cap]||null;
 }
@@ -1617,25 +2492,72 @@ async function runOmr(){
       const T=Math.max(...[0,1].slice(0,nSt).map(staffEnd)),T2=(()=>{const m=measureAt(T);return T>m.start?m.start+m.cap:T;})();
       for(let si=0;si<nSt;si++)padTo(si,T2);
       const m0=measures(T2).length-1;
-      for(const part of sy.parts){// 小節が長すぎるときは、数字が省略された3連符を推定（3つ並んだ同じ音価の音を3連符に）
-        {const cap=measureAt(T2).cap,cd=c=>evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0});let seg=[];
-          const fix=()=>{let tot=seg.reduce((a,c)=>a+cd(c),0),ex=tot-cap;if(ex<=0)return;
-            for(let i=0;i+2<seg.length&&ex>0;i++){const w=seg.slice(i,i+3);if(w.some(c=>c.k!=='n'||c.tup||c.dots||c.d!==w[0].d)||!['16','32'].includes(w[0].d)||(part.s&&w[2].x-w[0].x>part.s*6))continue;const u=BASE[w[0].d];if(u>ex)continue;w.forEach(c=>c.tup=3);ex-=u;i+=2;}};
-          for(const c of part.cols){if(c.k==='b'){fix();seg=[];}else if(c.k==='n'||c.k==='r')seg.push(c);}fix();}
-        const si=Math.min(part.si,nSt-1);let barSeen=false,k=0,held=[],since=0;
-        for(const c of part.cols){
-          if(c.k==='b'){if(!barSeen||!since)continue;since=0;k++;const ms=measures(T2+WH*8*k,m0+k+1),tgt=ms[m0+k].start;if(staffEnd(si)!==tgt)warn.add(m0+k-1);if(staffEnd(si)>tgt)trimTo(si,tgt);
-            while(S.staves[si].length&&(staffEnd(si)>tgt||(tgt-staffEnd(si))%60))S.staves[si].pop();padTo(si,tgt);held=[];continue;}
-          barSeen=true;since++;const T=staffEnd(si);held=held.filter(h=>h.end>T);
-          if(c.k==='r'){if(c.d==='w'){const m=measureAt(T);appendEv(si,{r:true,n:[]},T===m.start?m.cap:m.start+m.cap-T);held=[];continue;}
-            const dur=evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0});
-            if(held.length){const tp={r:false,n:held.map(h=>h.end>T+dur?{m:h.m,t:1}:{m:h.m}),d:c.d,dots:c.dots};if(c.tup)tp.tup=3;appendEv(si,tp,c.tup?null:dur);}
-            else{const tp={r:true,n:[],d:c.d,dots:c.dots};if(c.tup)tp.tup=3;appendEv(si,tp);}continue;}
-          const dur=evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0}),nm=new Map();
-          held.forEach(h=>nm.set(h.m,h.end>T+dur?{m:h.m,t:1}:{m:h.m}));
-          c.ms.forEach((m,i)=>{if(m<LOWK||m>HIGHK)return;const it=c.ds[i]||c,len=evTicks({d:it.d,dots:it.dots,tup:c.tup?3:0});held=held.filter(h=>h.m!==m);
-            if(len>dur+1){nm.set(m,{m,t:1});held.push({m,end:T+len});}else nm.set(m,(c.ties||[]).includes(m)?{m,t:1}:{m});});
-          const tp={r:false,n:[...nm.values()],d:c.d,dots:c.dots};if(c.tup)tp.tup=3;if(c.orn)tp.orn=c.orn;if(c.gr&&c.gr.length)tp.gr=[...new Set(c.gr)];if(c.art)tp.art=c.art;if(c.dyn)tp.dyn=c.dyn;appendEv(si,tp);}}
+      // 両段で同じ長さに揃う「長さの違う小節」（分割小節など）は、その長さの小節にする
+      {const cd=c=>evTicks({d:c.d,dots:c.dots,tup:c.tup?3:0}),sums=sy.parts.map(part=>{const out=[];let cur=[],seen=false;
+          const fin=()=>{if(cur.some(x=>x.k==='r'&&x.d==='w'))out.push(null);else out.push(cur.reduce((a,c)=>a+cd(c),0));cur=[];};
+          for(const c of part.cols){if(c.k==='b'){if(!seen||!cur.length)continue;fin();continue;}if(c.k==='c'||c.ov)continue;seen=true;cur.push(c);}if(cur.length)fin();return out;});
+        const n=Math.max(...sums.map(x=>x.length));for(let j=0;j<n;j++){const v=sums.map(x=>x[j]).filter(x=>x!=null);if(!v.length||v.some(x=>x!==v[0]))continue;const L=v[0],ms=measures(T2+WH*8*(j+1),m0+j+1),cap=ms[m0+j]?.cap;
+          if(L>0&&cap&&L!==cap&&L%240===0&&(sy.parts.length>1||L<cap)&&!S.mA[m0+j]?.len)(S.mA[m0+j]=S.mA[m0+j]||{}).len=L;}}
+      const cd=c=>c.tk||evTicks({d:c.d,dots:c.dots,tup:c.tup||0,tn:c.tn});
+      const segsOf=part=>{const segs=[];let cur=[],seen=false;for(const c of part.cols){if(c.k==='b'){if(!seen||!cur.some(x=>x.k!=='c'))continue;segs.push(cur);cur=[];continue;}if(c.k!=='c')seen=true;cur.push(c);}if(cur.some(x=>x.k!=='c'))segs.push(cur);return segs;};
+      const PS=sy.parts.map(segsOf);
+      // 拍の目印: 拍数がちょうど合う段の音の位置(x)と時刻
+      const anchorsOf=(pi,j)=>{const A=[];sy.parts.forEach((p2,q)=>{if(q===pi)return;const cl=(PS[q][j]||[]).filter(c=>c.k==='n'||(c.k==='r'&&!c.ov));const ms=measures(T2+WH*8*(j+1),m0+j+1),cap=ms[m0+j]?.cap;if(!cl.length||cl.reduce((a,c)=>a+cd(c),0)!==cap)return;let t=0;for(const c of cl){A.push({x:c.x,t});t+=cd(c);}});return A.sort((a,b)=>a.x-b.x);};
+      // 数字の省略された連符（16:12 など）: 拍の区間ごとに、同じ音価の連続音を区間の長さに収める
+      const tupFix=(cl,cap,A,ps)=>{const ns=cl.filter(c=>c.k==='n'||c.k==='r');let tot=ns.reduce((a,c)=>a+cd(c),0);if(tot<=cap||!ns.length)return;
+        const anc=[{x:-1e9,t:0},...A.filter((a,i)=>a.t>0&&a.t<cap&&(!i||a.t>A[i-1].t)),{x:1e9,t:cap}];
+        for(let k=0;k+1<anc.length;k++){const a=anc[k],b2=anc[k+1],seg=ns.filter(c=>c.x>=a.x-ps*.6&&c.x<b2.x-ps*.6);if(seg.length<3)continue;const span=b2.t-a.t,sum=seg.reduce((x,c)=>x+cd(c),0);if(sum<=span)continue;
+          const cnt={};seg.forEach(c=>{if(c.k==='n'&&!c.dots&&!c.tup&&BASE[c.d]<=120)cnt[c.d]=(cnt[c.d]||0)+1;});const d=Object.keys(cnt).sort((p,q)=>cnt[q]-cnt[p])[0];if(!d||cnt[d]<3)continue;
+          const run=seg.filter(c=>c.d===d&&!c.dots&&!c.tup),u=BASE[d],others=sum-run.length*u,target=span-others;if(target<=0||target%u||target>=run.length*u)continue;
+          const n=run.length,tn=target/u,g='o'+uid();run.forEach((c,i)=>{c.tup=n;c.tn=tn;c.tg=g;c.tk=Math.round((i+1)*target/n)-Math.round(i*target/n);});}};
+      sy.parts.forEach((part,pi)=>{
+        const si=Math.min(part.si,nSt-1),ps=part.s||10;
+        // 小節が長すぎるときは、数字が省略された3連符を推定（3つ並んだ同じ音価の音を3連符に）
+        const fix=(seg,cap)=>{let tot=seg.reduce((a,c)=>a+cd(c),0),ex=tot-cap;if(ex<=0)return;
+          for(let i=0;i+2<seg.length&&ex>0;i++){const w=seg.slice(i,i+3);if(w.some(c=>c.k!=='n'||c.tup||c.dots||c.d!==w[0].d)||!['16','32'].includes(w[0].d)||(w[2].x-w[0].x>ps*6))continue;const u=BASE[w[0].d];if(u>ex)continue;w.forEach(c=>c.tup=3);ex-=u;i+=2;}};
+        const segs=PS[pi];
+        {const pc=part.clef==='treble8'?'treble':part.clef;if(pc&&clefAt(si,T2)!==pc){if(T2===0)S.clefs[si]=pc;else{S.clefCh=(S.clefCh||[]).filter(x=>!(x.s===si&&x.t===T2));S.clefCh.push({s:si,t:T2,c:pc});}}}
+        const sub=(c,ix)=>{const o={...c,src:c,ms:ix.map(i=>c.ms[i]),ys:ix.map(i=>c.ys[i]),ds:ix.map(i=>c.ds[i])};const best=o.ds.slice().sort((p,q)=>BASE[p.d]-BASE[q.d])[0];o.d=best.d;o.dots=best.dots;if(c.ties)o.ties=c.ties.filter(m=>o.ms.includes(m));return o;};
+        // 2声部（符幹が上下に分かれて同時に鳴る）小節は、上向き＝第1声部、下向き＝第2声部に分ける
+        const twoV=cl=>{const mid=part.mid,opp=cl.some(c=>c.k==='n'&&c.ds.some(it=>it.up===true)&&c.ds.some(it=>it.up===false)&&new Set(c.ds.map(it=>it.sid).filter(x=>x!=null)).size>1),ovr=cl.some(c=>c.k==='r'&&c.ov);
+          if(!opp&&!ovr)return null;const U=[],D=[];
+          for(const c of cl){if(c.k==='c'){U.push(c);continue;}if(c.k==='r'){if(c.d==='w')continue;(c.y!=null&&mid!=null&&c.y>mid+ps*.4?D:U).push({...c,ov:0});continue;}
+            const iu=[],id=[];c.ds.forEach((it,i)=>(it.up===false?id:iu).push(i));if(!iu.length)D.push({...c,src:c});else if(!id.length)U.push({...c,src:c});else{U.push(sub(c,iu));D.push(sub(c,id));}}
+          return D.some(c=>c.k==='n')&&U.some(c=>c.k==='n')?[U,D]:null;};
+        const write=(li,cl,tx)=>{let held=[];
+          for(const c of cl){
+            if(tx&&c.k!=='c'){const want=tx(c.x),T0=staffEnd(li);if(want!=null&&want-T0>=30){appendEv(li,{r:true,n:[],hid:1},want-T0);}}
+            if(c.k==='c'){if(li>=2)continue;const t=staffEnd(li),cl2=c.t==='treble8'?'treble':c.t;S.clefCh=(S.clefCh||[]).filter(x=>!(x.s===si&&x.t>=t));if(clefAt(si,t)!==cl2)S.clefCh.push({s:si,t,c:cl2});continue;}
+            const T=staffEnd(li);held=held.filter(h=>h.end>T);
+            if(c.k==='r'){if(c.d==='w'){const m=measureAt(T);appendEv(li,li>=2?{r:true,n:[],hid:1}:{r:true,n:[]},T===m.start?m.cap:m.start+m.cap-T);held=[];continue;}
+              const dur=cd(c);
+              const tf=tp=>{if(c.tup){tp.tup=c.tup;if(c.tn){tp.tn=c.tn;tp.tg=c.tg;tp.tk=c.tk;}}return tp;};
+              if(held.length){const tp=tf({r:false,n:held.map(h=>h.end>T+dur?{m:h.m,t:1}:{m:h.m}),d:c.d,dots:c.dots});appendEv(li,tp,c.tup?null:dur);}
+              else{appendEv(li,tf({r:true,n:[],d:c.d,dots:c.dots}));}continue;}
+            const dur=cd(c),nm=new Map();
+            held.forEach(h=>nm.set(h.m,h.end>T+dur?{m:h.m,t:1}:{m:h.m}));
+            c.ms.forEach((m,i)=>{if(m<LOWK||m>HIGHK)return;const it=c.ds[i]||c,len=(it.d===c.d&&(it.dots||0)===(c.dots||0))?dur:Math.round(evTicks({d:it.d,dots:it.dots})*dur/Math.max(1,evTicks({d:c.d,dots:c.dots})));held=held.filter(h=>h.m!==m);
+              if(len>dur+1){nm.set(m,{m,t:1});held.push({m,end:T+len});}else nm.set(m,(c.ties||[]).includes(m)?{m,t:1}:{m});});
+            const tp={r:false,n:[...nm.values()],d:c.d,dots:c.dots};if(c.tup){tp.tup=c.tup;if(c.tn){tp.tn=c.tn;tp.tg=c.tg;tp.tk=c.tk;}}if(c.orn)tp.orn=c.orn;if(c.gr&&c.gr.length)tp.gr=[...new Set(c.gr)];if(c.art)tp.art=c.art;if(c.dyn)tp.dyn=c.dyn;if(c.arp&&c.ms.length>1)tp.arp=1;appendEv(li,tp);(c.src||c).eid=tp.id;}};
+        const settle=(li,tgt,hid)=>{if(staffEnd(li)>tgt)trimTo(li,tgt);while(S.staves[li].length&&(staffEnd(li)>tgt||(tgt-staffEnd(li))%30))S.staves[li].pop();if(hid){const e=staffEnd(li);if(tgt>e)appendEv(li,{r:true,n:[],hid:1},tgt-e);}else padTo(li,tgt);};
+        segs.forEach((cl,j)=>{const mi=m0+j,ms=measures(T2+WH*8*(j+1),mi+1),M=ms[mi],start=M.start,cap=M.cap;
+          settle(si,start);
+          const one=cl.filter(c=>!(c.k==='r'&&c.ov)),sum1=one.filter(c=>c.k!=='c').reduce((a,c)=>a+cd(c),0);let V=null;
+          const A=anchorsOf(pi,j);
+          // 1音だけ長すぎる読み違い（共有符頭の旗・連桁の誤読）を、隣の音と同じ長さに直して合わせる
+          const repair=v=>{const ns=v.filter(c=>c.k==='n'||c.k==='r'),ex=ns.reduce((a,c)=>a+cd(c),0)-cap;if(ex<=0)return;
+            for(let i=0;i<ns.length;i++){const c=ns[i];if(c.k!=='n'||c.tup)continue;for(const nb of [ns[i+1],ns[i-1]]){if(nb&&nb.k==='n'&&!nb.tup&&cd(c)-ex===cd(nb)){c.d=nb.d;c.dots=nb.dots;return;}}}};
+          if(sum1!==cap){const tv=twoV(cl);if(tv){tv.forEach(v=>{repair(v);tupFix(v,cap,A,ps);fix(v.filter(c=>c.k==='n'||c.k==='r'),cap);});const su=tv.map(v=>v.filter(c=>c.k!=='c').reduce((a,c)=>a+cd(c),0));
+              const one2=one.map(c=>({...c}));tupFix(one2,cap,A,ps);fix(one2.filter(c=>c.k==='n'||c.k==='r'),cap);const s1=one2.filter(c=>c.k!=='c').reduce((a,c)=>a+cd(c),0);
+              if((su[0]===cap&&su[1]<=cap)||(su[1]===cap&&su[0]<=cap)||Math.max(...su.map(x=>Math.abs(x-cap)))<Math.abs(s1-cap))V=tv;}}
+          if(V){const tl=[];{let t=start;for(const c of V[0]){if(c.k==='c')continue;tl.push({x:c.x,t});t+=cd(c);}tl.push({x:1e9,t});}
+            const tx=x=>{let i=tl.findIndex(o=>o.x>x+ps*.6);if(i<0)return null;const a=tl[i-1];if(!a)return start;if(Math.abs(a.x-x)<=ps*.6)return a.t;const b2=tl[i];if(b2.x>=1e9)return a.t;return Math.round((a.t+(x-a.x)/(b2.x-a.x)*(b2.t-a.t))/30)*30;};
+            write(si,V[0]);if(si+2<4&&LISTS().includes(si+2)){settle(si+2,start,true);write(si+2,V[1],tx);if(staffEnd(si+2)>start+cap)trimTo(si+2,start+cap);}}
+          else{tupFix(one,cap,A,ps);fix(one.filter(c=>c.k==='n'||c.k==='r'),cap);write(si,one);}
+          if(staffEnd(si)!==start+cap)warn.add(mi);settle(si,start+cap);});
+        // オッターヴァの範囲記号
+        {let run=null;const flush=()=>{if(run&&run.a!==run.b)S.sp.push({t:run.sh>0?'8va':'8vb',s:si,a:run.a,b:run.b});run=null;};
+          for(const c of part.cols){if(c.k==='b'||c.k==='c')continue;if(c.k!=='n'||!c.eid){continue;}if(!c.ott){flush();continue;}if(run&&run.sh===c.ott)run.b=c.eid;else{flush();run={sh:c.ott,a:c.eid,b:c.eid};}}flush();}});
     }
     S.omrWarn=[...warn].sort((a,b)=>a-b);sel=null;lastGroup=null;syncSettings();changed();$('#stage').scrollTop=0;
     const vec=res.some(r=>r.vec);$('#pStatus').textContent=`認識完了 · ${total}個（${vec?'ベクター記号から高精度認識':'画像解析'}）。青/橙=符頭、緑=休符。`+(S.omrWarn.length?` 拍数が合わない小節 ${S.omrWarn.length}個を譜面上でオレンジ表示しています。`:'');
@@ -1645,10 +2567,10 @@ async function runOmr(){
 }
 
 /* ================= UI構築 ================= */
-function nIcon(d){const filled=d!=='w'&&d!=='h',stem=d!=='w',fl={'8':1,'16':2,'32':3}[d]||0;
+function nIcon(d){const filled=d!=='w'&&d!=='h',stem=d!=='w',fl={'8':1,'16':2,'32':3,'64':4}[d]||0;
   let s=`<svg width="16" height="24" viewBox="0 0 18 28"><ellipse cx="7.5" cy="21.5" rx="${d==='w'?6:5}" ry="3.7" transform="rotate(${d==='w'?0:-22} 7.5 21.5)" fill="${filled?'currentColor':'none'}" stroke="currentColor" stroke-width="${filled?0:1.7}"/>`;
   if(stem)s+='<path d="M12 20.5V3" stroke="currentColor" stroke-width="1.4"/>';for(let i=0;i<fl;i++)s+=`<path d="M12 ${3+i*5}c0 4 5 5 4 10c-.4-3.4-2.3-4.8-4-5.2z" fill="currentColor"/>`;return s+'</svg>';}
-$('#durBtns').innerHTML=[['w','全音符'],['h','2分音符'],['q','4分音符'],['8','8分音符'],['16','16分音符'],['32','32分音符']].map(([d,t])=>`<button class="btn sym" data-d="${d}" title="${t}" aria-pressed="false">${nIcon(d)}</button>`).join('');
+$('#durBtns').innerHTML=[['w','全音符'],['h','2分音符'],['q','4分音符'],['8','8分音符'],['16','16分音符'],['32','32分音符'],['64','64分音符']].map(([d,t])=>`<button class="btn sym" data-d="${d}" title="${t}" aria-pressed="false">${nIcon(d)}</button>`).join('');
 $('#durBtns').style.display='flex';$('#durBtns').style.gap='4px';
 $('#dynBtns').innerHTML=['ppp','pp','p','mp','mf','f','ff','fff','sfz','fp'].map(d=>`<button class="btn sym dyn" data-dyn="${d}">${d}</button>`).join('');
 $('#dynBtns').style.display='flex';$('#dynBtns').style.gap='4px';
@@ -1657,6 +2579,14 @@ $('#key').innerHTML=keyOpts;$('#bKey').innerHTML='<option value="">変更なし<
 const timeOpts=TIMES.map(t=>`<option value="${t}">${t==='C'?'C（4/4）':t==='C|'?'¢（2/2）':t}</option>`).join('');
 $('#time').innerHTML=timeOpts;$('#bTime').innerHTML='<option value="">変更なし</option>'+timeOpts;
 ['clef0','clef1'].forEach(id=>$('#'+id).innerHTML=Object.entries(CLEFS).map(([k,v])=>`<option value="${k}">${v}</option>`).join(''));
+$('#clefCh').innerHTML='<option value="">選択音符から…</option>'+Object.entries(CLEFS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'<option value="x">この位置の変更を削除</option>';
+$('#clefCh').onchange=ev=>{const v=ev.target.value;ev.target.value='';if(!v)return;if(!sel){toast('音部記号を変える位置の音符を選択してください');return;}
+  hist();const s2=sel.si%2,t=tickOf(sel.si,sel.a);S.clefCh=(S.clefCh||[]).filter(x=>!(x.s===s2&&x.t===t));
+  if(v!=='x'){if(t===0){S.clefs[s2]=v;syncSettings();}else S.clefCh.push({s:s2,t,c:v});}S.clefCh.sort((a,b)=>a.t-b.t);changed();};
+$('#sound').value=soundKind();pianoStatus();setTimeout(pianoFetch,1500);
+$('#sound').onchange=e=>{try{localStorage.setItem('scorepiano.sound',e.target.value);}catch(_){}if(e.target.value==='sample'){pianoFetch();if(AC)pianoLoad();}pianoStatus();toast(e.target.value==='sample'?'録音グランドピアノの音で鳴らします':'合成ピアノの音で鳴らします');};
+$('#voice2').onclick=()=>{UI.voice=UI.voice===2?1:2;sel=null;UI.lastSi=(UI.lastSi%2)+(UI.voice===2?2:0);render();updateUI();toast(UI.voice===2?'第2声部に入力します（符幹下向き）':'第1声部に戻しました');};
+$('#trem').onclick=()=>toggleProp(t=>{const n=((t[0].e.trem||0)+1)%4;t.forEach(({e})=>{if(e.r)return;if(n)e.trem=n;else delete e.trem;});});
 function targetMeasure(){
   if(sel){const t=tickOf(sel.si,sel.a);return measures(t).length-1;}
   if(selM!=null)return selM;return Math.max(0,measures(Math.max(0,maxEnd()-1)).length-1);
@@ -1668,7 +2598,7 @@ function syncSettings(){
 function updateUI(){
   const e=sel?S.staves[sel.si][sel.a]:null,d=e?e.d:UI.dur,dots=e?(e.dots||0):UI.dots,tup=e?!!e.tup:UI.tup;
   $$('#durBtns button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.d===d));
-  $('#dot1').setAttribute('aria-pressed',dots===1);$('#dot2').setAttribute('aria-pressed',dots===2);$('#tup').setAttribute('aria-pressed',tup);
+  $('#dot1').setAttribute('aria-pressed',dots===1);$('#dot2').setAttribute('aria-pressed',dots===2);$('#tup').setAttribute('aria-pressed',tup);$('#voice2').setAttribute('aria-pressed',UI.voice===2);
   $('#chord').setAttribute('aria-pressed',UI.chord);$('#undo').disabled=!H.u.length;$('#redo').disabled=!H.r.length;
   $$('[data-art]').forEach(b=>b.setAttribute('aria-pressed',!!(e&&(e.art||[]).includes(b.dataset.art))));
   $$('[data-orn]').forEach(b=>b.setAttribute('aria-pressed',!!(e&&e.orn===b.dataset.orn)));$('#arp').setAttribute('aria-pressed',!!(e&&e.arp));$('#graceBtn').setAttribute('aria-pressed',!!UI.grace);
@@ -1717,7 +2647,7 @@ $('#bAdd').onclick=()=>{hist();const T=maxEnd(),m=measureAt(T),end=T>m.start?m.s
 $('#layout').onchange=e=>{hist();S.layout=e.target.value;if(S.layout==='single'&&S.staves[1].length)toast('下段の内容は保持したまま非表示になります',3000);changed();};
 $('#clef0').onchange=e=>{hist();S.clefs[0]=e.target.value;changed();};$('#clef1').onchange=e=>{hist();S.clefs[1]=e.target.value;changed();};
 $('#key').onchange=e=>{hist();S.key=+e.target.value;changed();};
-$('#time').onchange=e=>{hist();const p=parseTime(e.target.value);S.time=p.time;S.timeSym=p.sym;[0,1].forEach(reflow);changed();};
+$('#time').onchange=e=>{hist();const p=parseTime(e.target.value);S.time=p.time;S.timeSym=p.sym;[0,1,2,3].forEach(reflow);changed();};
 $('#title').onchange=e=>{S.title=e.target.value;changed();};$('#composer').onchange=e=>{S.composer=e.target.value;changed();};
 $('#labels').onclick=()=>{UI.labels=!UI.labels;changed();};
 $('#zoomIn').onclick=()=>{UI.zoom=clamp(+(UI.zoom+.1).toFixed(2),.5,2);changed();};$('#zoomOut').onclick=()=>{UI.zoom=clamp(+(UI.zoom-.1).toFixed(2),.5,2);changed();};
@@ -1731,6 +2661,7 @@ $('#mSave').onclick=saveJson;$('#mMidiOut').onclick=exportMidi;$('#mPrint').oncl
 $('#mNew').onclick=()=>{if((S.staves[0].length||S.staves[1].length)&&!confirm('譜面をすべて消去しますか？'))return;stopPlayback();hist();S=newScore(S);sel=null;selM=null;lastGroup=null;REC.on=false;REC.open={};syncSettings();changed();toast('新しい譜面');};
 $('#fMidi').onchange=e=>{const f=e.target.files[0];if(f)importMidi(f);e.target.value='';};
 $('#fPdf').onchange=e=>{const f=e.target.files[0];if(f)openPdf(f);e.target.value='';};
+$('#fXml').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const t=await musicXmlText(f);if((S.staves[0].length||S.staves[1].length)&&!confirm('現在の譜面をMusicXMLで置き換えますか？'))return;importMusicXml(t,f.name.replace(/\.(musicxml|xml|mxl)$/i,''));}catch(err){console.error(err);alert('MusicXMLを読み込めませんでした。\n'+err.message);}};
 $('#fJson').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();fr.onload=()=>{try{stopPlayback();hist();loadScore(JSON.parse(fr.result));sel=null;lastGroup=null;syncSettings();changed();toast('譜面を読み込みました');}catch(err){alert('譜面ファイルを読み込めませんでした。\n'+err.message);}};fr.readAsText(f,'utf-8');e.target.value='';};
 $('#mmClose').onclick=()=>$('#midiModal').classList.remove('open');$('#mmRun').onclick=runMidiImport;
 $('#pClose').onclick=()=>{$('#pdfModal').classList.remove('open');$('#pdfModal').setAttribute('aria-hidden','true');};
@@ -1755,7 +2686,7 @@ $('#score').addEventListener('click',e=>{
   if(!R.svg)return;const r=R.svg.getBoundingClientRect(),x=(e.clientX-r.left)/R.scale,y=(e.clientY-r.top)/R.scale;
   let best=null,bd=1e9;for(const h of R.hits){const dx=Math.max(h.x-x,0,x-(h.x+h.w)),dy=Math.max(h.y-y,0,y-(h.y+h.h)),d=Math.hypot(dx,dy);if(d<bd){bd=d;best=h;}}
   if(best&&bd<9){selectEv(best.si,best.idx,e.shiftKey);return;}
-  const mi=R.mx.findIndex(mx=>mx&&x>=mx.x&&x<=mx.x+mx.w&&y>=mx.staves[0].getYForLine(0)-24&&y<=mx.staves[mx.staves.length-1].getYForLine(4)+24);
+  const mi=R.mx.findIndex(mx=>mx&&x>=mx.box.x&&x<=mx.box.x+mx.box.w&&y>=mx.box.y0-24&&y<=mx.box.y1+24);
   sel=null;selM=mi>=0?mi:null;render();updateUI();
 });
 let rsT=0,lastW=0;new ResizeObserver(()=>{const w=$('#score').clientWidth;if(Math.abs(w-lastW)<2)return;lastW=w;clearTimeout(rsT);rsT=setTimeout(()=>{render();},120);}).observe($('#score'));
@@ -1766,11 +2697,47 @@ document.addEventListener('pointerup',e=>{if(e.target.matches&&e.target.matches(
 window.addEventListener('beforeunload',()=>{if(MIC.on)micStop(true);});
 
 // --- 起動 ---
-try{const d=localStorage.getItem('scorepiano.v2');if(d){loadScore(JSON.parse(d));}}catch(_){S=newScore();}
+const DEFAULT_XML_FLAG='scorepiano.defaultXmlLoaded.v1';
+let loadBundledDefault=false, restoredPrevious=false;
+try{
+  const d=localStorage.getItem('scorepiano.v2');
+  if(d){
+    loadScore(JSON.parse(d));
+    // 旧版の組み込み初期譜面を保存済みの場合は、曲名だけ新しい名称へ更新します。
+    if(S.title==='Étude in G♯ Minor'){
+      S.title='la Campanella';
+      try{localStorage.setItem('scorepiano.v2',JSON.stringify(S));}catch(_){}
+    }
+    const hasSavedContent=S.staves.some(a=>Array.isArray(a)&&a.length>0);
+    if(hasSavedContent){
+      restoredPrevious=true;
+      try{localStorage.setItem(DEFAULT_XML_FLAG,'1');}catch(_){}
+    }else if(localStorage.getItem(DEFAULT_XML_FLAG)!=='1')loadBundledDefault=true;
+  }else if(localStorage.getItem(DEFAULT_XML_FLAG)!=='1')loadBundledDefault=true;
+}catch(_){
+  S=newScore();
+  try{loadBundledDefault=localStorage.getItem(DEFAULT_XML_FLAG)!=='1';}catch(_){loadBundledDefault=true;}
+}
 buildPiano();syncSettings();render();updateUI();requestAnimationFrame(()=>{layoutPiano();centerOn(60);});
-if(S.staves[0].length||S.staves[1].length)toast('前回の譜面を復元しました');
+if(restoredPrevious&&(S.staves[0].length||S.staves[1].length))toast('前回の譜面を復元しました');
 listDevices();
-window.__SP={findStaves,partials,oddEv,get S(){return S;},set S(v){S=v;},render,enterChord,enterRest,appendEv,spectrum,detect,salience,MIC,parseMidi,linearNotes,timeline,R,UI,omrPage,OMR,changed,selectEv,addSpanner,staffEnd,measures};
+if(loadBundledDefault){
+  toast('初期譜面を読み込んでいます…',5000);
+  (async()=>{
+    const binary=atob(EMBEDDED_DEFAULT_MXL);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const f=new File([bytes],'rakanpanera-risuto.mxl',{type:'application/vnd.recordare.musicxml'});
+    const xml=await musicXmlText(f);
+    importMusicXml(xml,'rakanpanera-risuto');
+    // 譜面本体を先に保存してから初期譜面の読み込み済みフラグを記録
+    try{localStorage.setItem('scorepiano.v2',JSON.stringify(S));localStorage.setItem(DEFAULT_XML_FLAG,'1');}catch(_){}
+  })().catch(err=>{
+    console.error('組み込み初期譜面の読み込みに失敗しました',err);
+    toast('初期譜面を読み込めませんでした。ファイルメニューからMusicXMLを読み込んでください。',6000);
+  });
+}
+window.__SP={PIANO,sampleFor,buildMeasure,minW,evTicks,clefAt,findStaves,partials,oddEv,get S(){return S;},set S(v){S=v;},render,enterChord,enterRest,appendEv,spectrum,detect,salience,MIC,parseMidi,linearNotes,timeline,R,UI,omrPage,OMR,changed,selectEv,addSpanner,staffEnd,measures};
 })();
 </script>
 </body>
